@@ -235,7 +235,7 @@ class ReservationIn(BaseModel):
     allergy: str = Field(default="", max_length=2000)
     note: str = Field(default="", max_length=2000)
     grouped: bool = False           # グループ登録する
-    group_with: int | None = None   # 紐づける相手の予約ID
+    group_with: int | None = None   # 紐づける相手の予約ID(None なら単体でグループにする)
 
     _time = field_validator("time_slot")(norm_time)
 
@@ -363,7 +363,7 @@ def create_reservation(meal: str, body: ReservationCreateIn, user: User = Depend
     now = now_jst()
     values = body.model_dump(exclude={"date", "nights"} | GROUP_FIELDS)
     stay_id = uuid.uuid4().hex if body.nights > 1 else None
-    target = group_target(db, meal, body.date, body.group_with, None) if body.grouped else None
+    target = group_target(db, meal, body.date, body.group_with, None) if body.grouped and body.group_with else None
     created = []
     for i in range(body.nights):
         d = body.date + timedelta(days=i)
@@ -371,7 +371,8 @@ def create_reservation(meal: str, body: ReservationCreateIn, user: User = Depend
         mate = target if i == 0 or not target else (
             db.scalar(select(Reservation).where(Reservation.stay_id == target.stay_id, Reservation.date == d,
                                                 Reservation.deleted_at.is_(None))) if target.stay_id else None)
-        group_id = ensure_group(db, mate, user) if mate else None
+        # 相手なしのグループ登録は単体のグループ(日ごとに別のID)
+        group_id = ensure_group(db, mate, user) if mate else (uuid.uuid4().hex if body.grouped and not body.group_with else None)
         r = Reservation(meal=meal, date=d, nights=body.nights, night_no=i + 1,
                         stay_id=stay_id, group_id=group_id, **values,
                         created_at=now, created_by=user.id, updated_at=now, updated_by=user.id)
@@ -392,6 +393,12 @@ def update_reservation(meal: str, rid: int, body: ReservationIn, user: User = De
     old_group = r.group_id
     if not body.grouped:
         values["group_id"] = None
+    elif not body.group_with:
+        # 単体のグループ: すでに自分だけのグループならそのまま、他の予約と一緒なら抜けて単体にする
+        alone = r.group_id and not db.scalar(select(func.count()).select_from(Reservation).where(
+            Reservation.group_id == r.group_id, Reservation.id != r.id, Reservation.deleted_at.is_(None)))
+        if not alone:
+            values["group_id"] = uuid.uuid4().hex
     else:
         t = group_target(db, meal, r.date, body.group_with, r.id)
         if not (r.group_id and t.group_id == r.group_id):
@@ -788,7 +795,7 @@ MEAL_LABELS = {"dinner": "夕食", "breakfast": "朝食"}
 WEEKDAYS = "月火水木金土日"
 # (キー, 見出し) — 画面と Excel の列順
 SUMMARY_COLS = [
-    ("groups", "組数"), ("adults", "大人"), ("children", "子供"), ("infants", "幼児"), ("total", "計"),
+    ("groups", "組数"), ("adults", "大人"), ("children", "幼児"), ("infants", "席のみ"), ("total", "計"),
     ("entered", "入場済(組)"),
 ]
 SUMMED = ("adults", "children", "infants")
@@ -888,7 +895,7 @@ def meal_summary_xlsx(meal: str, start: date, end: date, _: User = Depends(curre
 # ---------- 操作ログ ----------
 FIELD_LABELS = {
     "date": "日付", "nights": "泊数", "night_no": "何泊目", "time_slot": "時間", "room": "部屋",
-    "guest_name": "代表者名", "adults": "大人", "children": "子供", "infants": "幼児",
+    "guest_name": "代表者名", "adults": "大人", "children": "幼児", "infants": "席のみ",
     "allergy": "アレルギー", "note": "備考", "group_id": "グループ", "entered_at": "ステータス",
 }
 RES_ACTIONS = {"create": "登録", "update": "変更", "delete": "削除", "restore": "復元",
