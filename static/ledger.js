@@ -54,7 +54,7 @@
         <button class="iconBtn" data-act="next" aria-label="翌日"><i class="ti ti-chevron-right"></i></button>
         <button class="btn" data-act="today">今日</button>
       </div>
-      <input type="search" id="ldSearch" placeholder="予約番号・部屋・名前・備考で検索" aria-label="検索">
+      <input type="search" id="ldSearch" placeholder="予約番号・部屋・名前・備考・G1で検索" title="「G」でグループの予約すべて、「G1」でグループ1だけを表示" aria-label="検索">
       <label class="delToggle"><input type="checkbox" id="ldShowDeleted">削除済みも表示</label>
       <div class="barRight">
         <button class="btn" data-act="slots" title="時間枠の追加・削除"><i class="ti ti-clock-edit"></i>時間枠</button>
@@ -163,7 +163,12 @@
     const q = normSearch(state.q);
     let rows = state.rows;
     if (state.slotFilter !== null) rows = rows.filter(r => (r.time_slot || UNSET) === state.slotFilter);
-    if (q) rows = rows.filter(r => [r.resv_no, r.room, r.guest_name, r.allergy, r.note].some(v => normSearch(v).includes(q)));
+    // 「G」でグループの予約すべて、「G1」でグループ1だけ(全角・小文字・「グループ1」も可)
+    const gq = q.match(/^(?:g|グループ)(\d*)$/);
+    if (gq) {
+      const groups = groupInfo();
+      rows = rows.filter(r => { const g = groups[r.group_id]; return g && (!gq[1] || g.no === +gq[1]); });
+    } else if (q) rows = rows.filter(r => [r.resv_no, r.room, r.guest_name, r.allergy, r.note].some(v => normSearch(v).includes(q)));
     const col = COLUMNS.find(c => c.key === state.sort.key);
     const { dir } = state.sort;
     const cmp = (x, y) => typeof x === 'number' ? x - y : x.localeCompare(y, 'ja', { numeric: true });
