@@ -29,14 +29,12 @@
   // 見取り図の壁・設備(添付の見取り図を簡易的に再現)。座標は 1000×460(サーバーの floor.py と同じ)
   const WALLS = `
     <path class="wall" d="M42 30 H640 V430 H42 Z"/>
-    <path class="wall" d="M662 30 H998 V330 H662 Z"/>
-    <path class="wall thin" d="M900 350 V450 M900 370 H998 M900 390 H998 M900 410 H998 M900 430 H998"/>
+    <path class="wall" d="M662 30 H998 V270 H662 Z"/>
     <path class="fixture" d="M168 34 H578 V114 H548 V64 H198 V114 H168 Z"/>
     <rect class="fixture" x="204" y="152" width="332" height="68" rx="4"/>
     <text class="label" x="370" y="188">四季の蔵</text>
     <text class="label small" x="373" y="54">カウンター</text>
-    <text class="label small" x="975" y="20">ENT</text>
-    <text class="label small" x="870" y="402">階段</text>`;
+    <text class="label small" x="975" y="20">ENT</text>`;
 
   root.innerHTML = `
     <div class="flBar noPrint">
