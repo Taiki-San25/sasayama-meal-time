@@ -147,10 +147,16 @@
     ? `<span class="grpTag g${(g.no - 1) % GROUP_COLORS}" title="グループ: ${esc(g.members.map(m => roomText(m.room)).join('・'))}">G${g.no}</span>${extra}`
     : '';
 
+  // 検索用の正規化: 半角カナ→全角(NFKC)、ひらがな→カタカナ、英字は小文字、空白は無視
+  // (ﾔﾏﾀﾞ・ヤマダ・やまだ・ﾔﾏﾀﾞ(濁点付き)のどれでも同じ名前に当たる)
+  const normSearch = v => String(v || '').normalize('NFKC')
+    .replace(/[ぁ-ゖ]/g, c => String.fromCharCode(c.charCodeAt(0) + 0x60))
+    .replace(/\s+/g, '').toLowerCase();
+
   function visibleRows() {
-    const q = state.q.trim().toLowerCase();
+    const q = normSearch(state.q);
     let rows = state.rows;
-    if (q) rows = rows.filter(r => [r.resv_no || '', r.room, r.guest_name, r.allergy, r.note].some(v => v.toLowerCase().includes(q)));
+    if (q) rows = rows.filter(r => [r.resv_no, r.room, r.guest_name, r.allergy, r.note].some(v => normSearch(v).includes(q)));
     const col = COLUMNS.find(c => c.key === state.sort.key);
     const { dir } = state.sort;
     const cmp = (x, y) => typeof x === 'number' ? x - y : x.localeCompare(y, 'ja', { numeric: true });
