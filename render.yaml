@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: sasayama-meal-time
+    runtime: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /healthz
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: DATABASE_URL
+        fromDatabase:
+          name: sasayama-meal-time-db
+          property: connectionString
+      - key: SESSION_SECRET
+        generateValue: true
+      # 初回起動時に作成する管理者(ユーザーが0人のときのみ使用)。Render のダッシュボードで設定する
+      - key: ADMIN_USERNAME
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      # 最上位ロール(developer)のアカウント。そのIDが未登録なら起動時に作成する
+      - key: DEVELOPER_USERNAME
+        sync: false
+      - key: DEVELOPER_PASSWORD
+        sync: false
+
+databases:
+  - name: sasayama-meal-time-db
+    plan: basic-256mb
+    databaseName: sasayama_meal_time
