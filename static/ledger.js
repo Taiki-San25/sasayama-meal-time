@@ -42,6 +42,7 @@
     sort: { key: 'time', dir: 1 },  // dir: 1=昇順 -1=降順
     showDeleted: false,
     role: null,  // ログイン中のロール(入場済の操作はレストランのみ)
+    slotFilter: params.has('t') ? params.get('t') : null,  // 時間枠カードで絞り込み中の時間('' は未定、null は絞り込みなし)
   };
 
   root.innerHTML = `
@@ -63,6 +64,7 @@
     </div>
     <h2 class="printTitle" id="ldPrintTitle"></h2>
     <div class="summary" id="ldSummary"></div>
+    <div class="filterNote noPrint" id="ldFilterNote" hidden></div>
     <div class="tableWrap"><table class="grid ledgerTable">
       <thead><tr>${COLUMNS.map(c => `<th class="sortable${c.num ? ' num' : ''}${c.cls ? ' ' + c.cls : ''}" data-sort="${c.key}">
         <button type="button">${c.label}<i class="ti"></i></button></th>`).join('')}</tr></thead>
@@ -159,6 +161,7 @@
   function visibleRows() {
     const q = normSearch(state.q);
     let rows = state.rows;
+    if (state.slotFilter !== null) rows = rows.filter(r => (r.time_slot || UNSET) === state.slotFilter);
     if (q) rows = rows.filter(r => [r.resv_no, r.room, r.guest_name, r.allergy, r.note].some(v => normSearch(v).includes(q)));
     const col = COLUMNS.find(c => c.key === state.sort.key);
     const { dir } = state.sort;
@@ -193,22 +196,33 @@
   function renderSummary() {
     const agg = {};
     const add = (k, r) => {
-      const a = agg[k] || (agg[k] = { n: 0, adults: 0, children: 0, infants: 0 });
+      const a = agg[k] || (agg[k] = { n: 0, adults: 0, children: 0, infants: 0, entered: 0 });
       a.n++; a.adults += r.adults; a.children += r.children; a.infants += r.infants;
+      if (r.entered_at) a.entered++;
     };
     active().forEach(r => { add(r.time_slot || UNSET, r); add('*', r); });
     const keys = [...new Set([...state.slots, ...Object.keys(agg).filter(k => k !== '*' && k !== UNSET)])].sort();
     if (agg[UNSET]) keys.push(UNSET);
-    const card = (label, a, cls = '') => {
-      a = a || { n: 0, adults: 0, children: 0, infants: 0 };
+    const card = (label, a, cls = '', slot = '*') => {
+      a = a || { n: 0, adults: 0, children: 0, infants: 0, entered: 0 };
       const t = total(a);
-      return `<div class="sumCard ${cls}${a.n ? '' : ' zero'}">
-        <div class="sumLabel">${esc(label)}</div>
+      const pct = a.n ? Math.round(a.entered / a.n * 100) : 0;
+      const allIn = a.n > 0 && a.entered === a.n;  // 入場済みが100%
+      const on = slot === '*' ? state.slotFilter === null : state.slotFilter === slot;
+      const tip = slot === '*' ? 'クリックで全部の時間を表示' : `クリックで ${label} の予約だけを表示`;
+      return `<div class="sumCard ${cls}${a.n ? '' : ' zero'}${allIn ? ' allIn' : ''}${on && state.slotFilter !== null ? ' on' : ''}" data-slot="${esc(slot)}" role="button" tabindex="0" title="${tip}" aria-pressed="${on}">
+        <div class="sumLabel">${esc(label)}${allIn ? '<span class="allInMark"> ✓全員入場</span>' : ''}</div>
         <div class="sumMain"><b>${t}</b>名 <span>${a.n}組</span></div>
-        <div class="sumSub">大${a.adults} 幼${a.children} 席${a.infants}</div></div>`;
+        <div class="sumSub">大${a.adults} 幼${a.children} 席${a.infants}</div>
+        <div class="entBar" role="progressbar" aria-label="入場" aria-valuemin="0" aria-valuemax="${a.n}" aria-valuenow="${a.entered}"><i style="width:${pct}%"></i></div>
+        <div class="entTxt">入場 ${a.entered}/${a.n}組</div></div>`;
     };
     $('ldSummary').innerHTML =
-      keys.map(k => card(k || '未定', agg[k], k ? '' : 'unset')).join('') + card('合計', agg['*'], 'total');
+      keys.map(k => card(k || '未定', agg[k], k ? '' : 'unset', k)).join('') + card('合計', agg['*'], 'total');
+    const note = $('ldFilterNote');
+    note.hidden = state.slotFilter === null;
+    note.innerHTML = state.slotFilter === null ? '' : `<i class="ti ti-filter"></i><b>${esc(state.slotFilter || '未定')}</b> の予約だけを表示中(印刷もこの表示になります)
+      <button type="button" class="btn" data-slot="*"><i class="ti ti-x"></i>絞り込みを解除</button>`;
   }
 
   function render() {
@@ -227,7 +241,9 @@
     dateInput.value = state.date;
     $('ldDow').textContent = `(${dow(state.date)})`;
     $('ldDow').className = 'dow' + ({ 日: ' sun', 土: ' sat' }[dow(state.date)] || '');
-    $('ldPrintTitle').textContent = `${MEAL === 'dinner' ? '夕食' : '朝食'}時間管理表　${state.date.replace(/-/g, '/')}(${dow(state.date)})`;
+    $('ldPrintTitle').textContent = `${MEAL === 'dinner' ? '夕食' : '朝食'}時間管理表　${state.date.replace(/-/g, '/')}(${dow(state.date)})`
+      + (state.slotFilter === null ? '' : `　${state.slotFilter || '時間未定'}のみ`);
+    document.body.classList.toggle('slotFiltered', state.slotFilter !== null);
     renderSummary();
     renderSortHeads();
 
@@ -529,6 +545,22 @@
     const col = COLUMNS.find(c => c.key === key);
     state.sort = state.sort.key === key ? { key, dir: -state.sort.dir } : { key, dir: col.firstDir || 1 };
     render();
+  });
+  // 時間枠カード: クリックでその時間だけ表示(同じカード・合計・解除ボタンで解除)
+  function setSlotFilter(slot) {
+    state.slotFilter = slot === '*' || slot === state.slotFilter ? null : slot;
+    const u = new URL(location.href);
+    if (state.slotFilter === null) u.searchParams.delete('t'); else u.searchParams.set('t', state.slotFilter);
+    history.replaceState(null, '', u);
+    render();
+  }
+  root.addEventListener('click', e => {
+    const c = e.target.closest('#ldSummary [data-slot], #ldFilterNote [data-slot]');
+    if (c) setSlotFilter(c.dataset.slot);
+  });
+  $('ldSummary').addEventListener('keydown', e => {
+    const c = e.target.closest('[data-slot]');
+    if (c && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); setSlotFilter(c.dataset.slot); }
   });
   $('ldShowDeleted').addEventListener('change', e => { state.showDeleted = e.target.checked; loadRows().catch(() => {}); });
 
