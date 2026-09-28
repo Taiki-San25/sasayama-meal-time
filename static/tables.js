@@ -33,8 +33,7 @@
     <path class="fixture" d="M168 34 H578 V114 H548 V64 H198 V114 H168 Z"/>
     <rect class="fixture" x="204" y="152" width="332" height="68" rx="4"/>
     <text class="label" x="370" y="188">四季の蔵</text>
-    <text class="label small" x="373" y="54">カウンター</text>
-    <text class="label small" x="975" y="20">ENT</text>`;
+    <text class="label small" x="373" y="54">カウンター</text>`;
 
   root.innerHTML = `
     <div class="flBar noPrint">
