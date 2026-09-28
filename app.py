@@ -1380,7 +1380,8 @@ def summarize(db: Session, meal: str, start: date, end: date) -> dict:
         a["groups"] += 1
         for k in SUMMED:
             a[k] += getattr(r, k)
-        a["total"] += r.adults + r.children  # 席のみは計に含めない
+        # 計: 夕食は大人+幼児(席のみは食事なし)、朝食は席のみも含めた全員
+        a["total"] += r.adults + r.children + (r.infants if meal == "breakfast" else 0)
         a["entered"] += r.entered_at is not None  # 全員入場した組
         if meal == "breakfast":
             a["partial"] += r.entered_at is None and bool(r.entered_count)

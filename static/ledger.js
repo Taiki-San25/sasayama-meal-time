@@ -106,7 +106,8 @@
   }
 
   // ---------- 描画 ----------
-  const total = r => r.adults + r.children;  // 席のみは計に含めない
+  // 計: 夕食は大人+幼児(席のみは含めない)、朝食は席のみも含めた全員
+  const total = r => r.adults + r.children + (MEAL === 'breakfast' ? r.infants : 0);
   const COUNT_KEYS = ['adults', 'children', 'infants'];  // 一覧から直接入力できる人数(大人・幼児・席のみ)
   const active = () => state.rows.filter(r => !r.deleted);
   // "2026-09-24T18:05:12" → "9/24 18:05"(今年以外は年も表示)
