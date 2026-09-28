@@ -644,7 +644,9 @@ def floor_view(d: date, user: User = Depends(current_user), db: Session = Depend
         "slots": slot_labels(db, "dinner"),
         "reservations": [to_dict(r, names) for r in rows],
         "assignments": [{"time_slot": a.time_slot, "table_id": a.table_id, "reservation_id": a.reservation_id,
-                         "memo": a.memo or ""}
+                         "memo": a.memo or "",
+                         "counts": None if a.adults is None else
+                         {"adults": a.adults, "children": a.children or 0, "infants": a.infants or 0}}
                         for a in db.scalars(select(TableAssignment).where(TableAssignment.date == d))],
     }
 
@@ -785,6 +787,12 @@ def floor_move(body: MoveIn, user: User = Depends(current_user), db: Session = D
         dest = assigned(db, body.date, body.time_slot, body.to_table_id, a.reservation_id)
         if dest:  # 移動先にもう同じ予約がいれば1つにまとめる(卓メモもつなげて残す)
             dest[0].memo = "\n".join(m for m in (dest[0].memo, a.memo) if m)
+            # 卓の人数: 両方とも指定済みなら足す。どちらかが自動なら自動に戻す
+            if dest[0].adults is not None and a.adults is not None:
+                for k in ("adults", "children", "infants"):
+                    setattr(dest[0], k, (getattr(dest[0], k) or 0) + (getattr(a, k) or 0))
+            else:
+                dest[0].adults = dest[0].children = dest[0].infants = None
             db.delete(a)
         else:
             a.table_id = body.to_table_id  # 卓メモはそのまま引き継ぐ
@@ -814,6 +822,33 @@ def floor_memo(body: MemoIn, user: User = Depends(current_user), db: Session = D
         a.memo = memo
         record(db, db.get(Reservation, a.reservation_id), user, "table_memo",
                {"table": table_names(db, body.date).get(body.table_id, "")})
+        db.commit()
+    return {"ok": True}
+
+
+class TableCountsIn(BaseModel):
+    date: date
+    time_slot: str
+    table_id: str
+    reservation_id: int
+    counts: CountsIn | None = None  # None = 自動に戻す
+
+
+@app.put("/api/floor/counts")
+def floor_counts(body: TableCountsIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """複数卓に分けた予約の、この卓の人数(大人・幼児・席のみ)を決める。None で自動の割り振りに戻す"""
+    rows = assigned(db, body.date, body.time_slot, body.table_id, body.reservation_id)
+    if not rows:
+        raise HTTPException(400, "割り当てが見つかりません。画面を更新してください")
+    a = rows[0]
+    new = body.counts.model_dump() if body.counts else {"adults": None, "children": None, "infants": None}
+    old = {"adults": a.adults, "children": a.children, "infants": a.infants}
+    if old != new:
+        for k, v in new.items():
+            setattr(a, k, v)
+        fmt = lambda c: "自動" if c["adults"] is None else f"大人{c['adults']} 幼児{c['children']} 席のみ{c['infants']}"
+        record(db, db.get(Reservation, a.reservation_id), user, "table_counts",
+               {"table": table_names(db, body.date).get(body.table_id, ""), "before": fmt(old), "after": fmt(new)})
         db.commit()
     return {"ok": True}
 
@@ -1255,7 +1290,7 @@ FIELD_LABELS = {
     "allergy": "アレルギー", "note": "備考", "group_id": "グループ", "entered_at": "ステータス",
     "tables": "テーブル",
 }
-RES_ACTIONS = {"create": "登録", "update": "変更", "delete": "削除", "restore": "復元", "table_memo": "卓メモを変更",
+RES_ACTIONS = {"create": "登録", "update": "変更", "delete": "削除", "restore": "復元", "table_memo": "卓メモを変更", "table_counts": "卓の人数を変更",
                "import": "CSV取込", "import_update": "CSV取込(更新)"}
 AUTH_ACTIONS = {"login": "ログイン", "login_failed": "ログイン失敗", "logout": "ログアウト",
                 "password_change": "パスワード変更"}
@@ -1308,6 +1343,8 @@ def operation_logs(start: date, end: date, _: User = Depends(current_user), db: 
             "target": f"{MEAL_LABELS.get(r.meal, '')} {r.date:%m/%d} {r.room} {r.guest_name}".strip(),
             "link": f"/{r.meal}?d={r.date.isoformat()}&hl={r.id}",
             "detail": f"卓 {(h.changes or {}).get('table', '')}" if h.action == "table_memo"
+                      else "卓 {table}: {before} → {after}".format(**{"table": "", "before": "", "after": "", **(h.changes or {})})
+                      if h.action == "table_counts"
                       else change_detail(h.action, h.changes or {}), **who(h.changed_by)})
     # チャット(取り消されたメッセージの本文はログにも出さない)
     chat_q = select(ChatMessage).where(

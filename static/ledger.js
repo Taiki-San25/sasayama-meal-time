@@ -117,7 +117,7 @@
   const FIELD_LABELS = { date: '日付', time_slot: '時間', room: '部屋', guest_name: '代表者名', adults: '大人',
     children: '幼児', infants: '席のみ', tables: 'テーブル', nights: '泊数', night_no: '何泊目', group_id: 'グループ', entered_at: 'ステータス', allergy: 'アレルギー', note: '備考' };
   const nightsLabel = r => `${r.night_no}泊/${r.nights}泊`;
-  const ACTION_LABELS = { create: '登録', update: '変更', delete: '削除', restore: '復元', import: 'CSV取込', import_update: 'CSV取込(更新)', table_memo: '卓メモを変更' };
+  const ACTION_LABELS = { create: '登録', update: '変更', delete: '削除', restore: '復元', import: 'CSV取込', import_update: 'CSV取込(更新)', table_memo: '卓メモを変更', table_counts: '卓の人数を変更' };
   // 複数部屋(「, 」区切り)は「115 他14室」と表示し、ホバーで全室
   const splitRooms = room => room.split(/\s*,\s*/).filter(Boolean);
   const roomText = room => { const rs = splitRooms(room); return rs.length > 1 ? `${rs[0]} 他${rs.length - 1}室` : room; };
@@ -392,14 +392,14 @@
       box.innerHTML = hist.map(h => {
         // 登録時は入力された項目だけ表示
         // 卓メモは中身を出さず、どの卓かだけ
-        const entries = h.action === 'table_memo' ? [] : Object.entries(h.changes || {})
+        const entries = ['table_memo', 'table_counts'].includes(h.action) ? [] : Object.entries(h.changes || {})
           .filter(([, [, v]]) => !['create', 'import'].includes(h.action) || (v !== '' && v !== null && v !== 0));
         const detail = entries.map(([f, [a, b]]) => `<li><b>${FIELD_LABELS[f] || esc(f)}</b>: ${['create', 'import'].includes(h.action)
           ? esc(fmtVal(f, b))
           : `${esc(fmtVal(f, a))} → ${esc(fmtVal(f, b))}`}</li>`).join('');
         return `<div class="hItem hi-${h.action}">
           <div class="hHead"><span class="hAct">${ACTION_LABELS[h.action] || esc(h.action)}</span>${fmtTs(h.changed_at)}　${esc(h.changed_by) || '-'}</div>
-          ${detail ? `<ul>${detail}</ul>` : ''}${h.action === 'table_memo' ? `<ul><li>卓 ${esc(h.changes?.table || '')}(内容はテーブルアサインで確認)</li></ul>` : ''}</div>`;
+          ${detail ? `<ul>${detail}</ul>` : ''}${h.action === 'table_memo' ? `<ul><li>卓 ${esc(h.changes?.table || '')}(内容はテーブルアサインで確認)</li></ul>` : ''}${h.action === 'table_counts' ? `<ul><li>卓 ${esc(h.changes?.table || '')}: ${esc(h.changes?.before || '')} → ${esc(h.changes?.after || '')}</li></ul>` : ''}</div>`;
       }).join('') || '<p class="muted">履歴はありません</p>';
     } catch (e) { box.textContent = '履歴を読み込めませんでした'; }
   }

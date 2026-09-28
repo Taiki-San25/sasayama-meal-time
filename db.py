@@ -160,6 +160,10 @@ class TableAssignment(Base):
     table_id: Mapped[str] = mapped_column(String(32))
     reservation_id: Mapped[int] = mapped_column(ForeignKey("reservations.id"), index=True)
     memo: Mapped[str] = mapped_column(Text, default="")  # 卓メモ(テーブルアサインページでのみ表示。割り当てを外すと消える)
+    # 複数卓に分けた予約の、この卓の人数。None = 自動(予約の人数から指定済みの卓を引いた残りを均等に)
+    adults: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    children: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    infants: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_jst)
     created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
 
@@ -175,6 +179,9 @@ ADDED_COLUMNS = [
     ("reservations", "entered_by", "INTEGER", None),
     ("floor_layouts", "version", "INTEGER NOT NULL DEFAULT 1", None),
     ("table_assignments", "memo", "TEXT NOT NULL DEFAULT ''", None),
+    ("table_assignments", "adults", "INTEGER", None),
+    ("table_assignments", "children", "INTEGER", None),
+    ("table_assignments", "infants", "INTEGER", None),
     ("reservations", "ext_key", "VARCHAR(64)", "CREATE INDEX IF NOT EXISTS ix_reservations_ext_key ON reservations (ext_key)"),
 ]
 # 使わなくなって削除した列: (テーブル, 列)。起動時に残っていれば消す

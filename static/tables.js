@@ -127,8 +127,17 @@
         ${r.allergy ? `<span class="rcAllergy" title="${esc(r.allergy)}"><i class="ti ti-alert-triangle"></i>アレルギー</span>` : ''}
         ${r.entered_at ? '<span class="rcEntered">入場済</span>' : ''}
         ${r.adults ? '' : '<span class="rcNoCount" title="大人が0人です。夕食時間管理表で人数を入力してください">人数未入力</span>'}
-        ${tbl.length ? `<span class="rcTables"><i class="ti ti-armchair"></i>${tbl.map(esc).join('・')}</span>` : ''}</div>
+        ${tbl.length ? `<span class="rcTables"><i class="ti ti-armchair"></i>${tbl.map(esc).join('・')}</span>` : ''}
+        ${assigned ? splitBadge(r.id) : ''}</div>
     </div>`;
+  }
+
+  // 複数卓に分けた予約で、卓ごとの人数の合計が予約の人数と合わないときの印
+  function splitBadge(rid) {
+    const s = splitCounts().summary[rid];
+    if (!s || s.tables < 2 || s.assigned === s.total) return '';
+    const diff = s.total - s.assigned;
+    return `<span class="rcSplitNg" title="卓ごとの人数の合計 ${s.assigned}名 / 予約 ${s.total}名">割り振り${diff > 0 ? `残り${diff}名` : `${-diff}名超過`}</span>`;
   }
 
   function renderList() {
@@ -151,19 +160,44 @@
       ${unset ? `<p class="muted unsetNote"><i class="ti ti-info-circle"></i>時間未定の予約が${unset}組あります。夕食時間管理表で時間を決めると割り当てられます。</p>` : ''}`;
   }
 
-  // 卓ごとの予約。複数卓にまたがる予約の人数は卓数で割って(切り上げ)数える
+  // 複数卓に分けた予約の卓ごとの人数。人数を決めた卓はその人数、決めていない卓は残りを均等に(端数は配置順で前の卓へ)
+  const COUNT_KEYS = ['adults', 'children', 'infants'];
+  function splitCounts() {
+    const res = resById();
+    const order = Object.fromEntries(currentTables().map((t, i) => [t.id, i]));
+    const byRes = {};
+    slotAssign().forEach(a => (byRes[a.reservation_id] = byRes[a.reservation_id] || []).push(a));
+    const out = {};  // `${rid}|${tableId}` → {adults, children, infants, fixed}
+    const summary = {};  // rid → {tables, assigned, total, fixedOver}
+    Object.entries(byRes).forEach(([rid, rows]) => {
+      const r = res[rid];
+      if (!r) return;
+      rows.sort((a, b) => (order[a.table_id] ?? 999) - (order[b.table_id] ?? 999));
+      const auto = rows.filter(a => !a.counts);
+      const alloc = Object.fromEntries(rows.map(a => [a.table_id, { fixed: !!a.counts, ...(a.counts || { adults: 0, children: 0, infants: 0 }) }]));
+      COUNT_KEYS.forEach(k => {
+        const rest = Math.max(0, r[k] - rows.reduce((n, a) => n + (a.counts ? a.counts[k] : 0), 0));
+        auto.forEach((a, i) => { alloc[a.table_id][k] = Math.floor(rest / auto.length) + (i < rest % auto.length ? 1 : 0); });
+      });
+      rows.forEach(a => { out[`${rid}|${a.table_id}`] = alloc[a.table_id]; });
+      const total = r.adults + r.children + r.infants;
+      const assigned = rows.reduce((n, a) => n + COUNT_KEYS.reduce((m, k) => m + alloc[a.table_id][k], 0), 0);
+      summary[rid] = { tables: rows.length, assigned, total };
+    });
+    return { out, summary };
+  }
+  // 卓ごとの予約と人数
   function tableLoads() {
     const res = resById();
-    const perRes = {};
-    slotAssign().forEach(a => { perRes[a.reservation_id] = (perRes[a.reservation_id] || 0) + 1; });
+    const { out: split } = splitCounts();
     const out = {};
     slotAssign().forEach(a => {
       const r = res[a.reservation_id];
       if (!r) return;
-      const n = perRes[r.id];
+      const c = split[`${r.id}|${a.table_id}`];
       const o = out[a.table_id] || (out[a.table_id] = { rs: [], adults: 0, children: 0, infants: 0 });
       o.rs.push(r);
-      o.adults += Math.ceil(r.adults / n); o.children += Math.ceil(r.children / n); o.infants += Math.ceil(r.infants / n);
+      COUNT_KEYS.forEach(k => { o[k] += c[k]; });
     });
     return out;
   }
@@ -201,7 +235,7 @@
       ? '卓をタップで選択(複数可)、ドラッグで移動(他の卓と端・中心が揃うと赤い線が出て吸着、Altキーを押しながらで吸着なし)。選んだ卓は矢印キーで微調整、複数選ぶと「揃える」「等間隔」が使えます。'
       : state.moveFrom ? '移動先の卓をタップしてください(もう一度同じ卓で取り消し)。'
       : state.selected ? '割り当てる卓をタップしてください(割り当て済みの卓なら相席になります)。'
-      : '予約を選んでから卓をタップ、またはドラッグ&ドロップで割り当てます。割り当て済みの卓をタップすると外す・移動ができます。人数(大人+幼児+席のみ)が席数を超えると赤字になります。「人数未入力」「+未」は大人0人の予約です(席数超過を判定できません)。';
+      : '予約を選んでから卓をタップ、またはドラッグ&ドロップで割り当てます。割り当て済みの卓をタップすると外す・移動ができます。人数(大人+幼児+席のみ)が席数を超えると赤字になります。複数卓に分けた予約は、卓をタップして卓ごとの人数を調整できます。「人数未入力」「+未」は大人0人の予約です(席数超過を判定できません)。';
     $('flHint').textContent = hint;
   }
 
@@ -219,6 +253,23 @@
   async function unassign(tableId, rid) {
     await api('/api/floor/unassign', { method: 'POST', body: { date: state.date, time_slot: state.slot, table_id: tableId, reservation_id: rid ?? null } });
     await load();
+  }
+
+  // 複数卓に分けた予約の「この卓の人数」欄
+  function countsBox(tableId, r) {
+    const { out, summary } = splitCounts();
+    const s = summary[r.id];
+    if (!s || s.tables < 2) return '';
+    const c = out[`${r.id}|${tableId}`];
+    const ok = s.assigned === s.total, diff = s.total - s.assigned;
+    const inp = (k, label) => `<label>${label}<input type="number" min="0" max="99" step="1" inputmode="numeric" data-cnt="${k}" value="${c[k]}"></label>`;
+    return `<div class="tiCounts" data-rid="${r.id}">
+      <div class="tcHead"><b>この卓の人数</b><span class="tcMode${c.fixed ? ' fixed' : ''}">${c.fixed ? '指定' : '自動(残りを均等に割り振り)'}</span></div>
+      <div class="tcInputs">${inp('adults', '大人')}${inp('children', '幼児')}${inp('infants', '席のみ')}
+        <button type="button" class="btn" data-ti="counts" data-rid="${r.id}"><i class="ti ti-device-floppy"></i>人数を保存</button>
+        ${c.fixed ? `<button type="button" class="btn" data-ti="countsAuto" data-rid="${r.id}">自動に戻す</button>` : ''}</div>
+      <p class="tcSum${ok ? '' : ' ng'}">${s.tables}卓の合計 ${s.assigned}名 / 予約 ${s.total}名${ok ? '' : `(${diff > 0 ? `残り${diff}名` : `${-diff}名超過`})`}</p>
+    </div>`;
   }
 
   const resAt = tableId => (tableLoads()[tableId] || { rs: [] }).rs;
@@ -253,6 +304,7 @@
           <div class="tiFacts"><span>大人${r.adults}・幼児${r.children}・席のみ${r.infants}</span><span>卓: ${tablesOfRes(r.id).map(esc).join('・')}</span></div>
           ${r.allergy ? `<p class="allergy"><i class="ti ti-alert-triangle"></i>${esc(r.allergy)}</p>` : ''}
           ${r.note ? `<p class="tiNote">備考: ${esc(r.note)}</p>` : ''}
+          ${countsBox(tableId, r)}
           <div class="tiMemo">
             <label for="memo${r.id}">卓メモ<small>このページでのみ表示されます</small></label>
             <textarea id="memo${r.id}" data-memo="${r.id}" maxlength="500" rows="2" placeholder="例: 窓側希望、記念日のケーキ">${esc(memoOf(tableId, r.id))}</textarea>
@@ -265,6 +317,24 @@
       const b = e.target.closest('[data-ti]');
       if (!b) return;
       const rid = +b.dataset.rid;
+      if (b.dataset.ti === 'counts' || b.dataset.ti === 'countsAuto') {
+        let counts = null;
+        if (b.dataset.ti === 'counts') {
+          const box = m.querySelector(`.tiCounts[data-rid="${rid}"]`);
+          counts = {};
+          for (const k of COUNT_KEYS) {
+            const v = box.querySelector(`[data-cnt="${k}"]`).value.trim(), n = Number(v);
+            if (v === '' || !Number.isInteger(n) || n < 0 || n > 99) return toast('人数は0〜99の整数で入力してください', true);
+            counts[k] = n;
+          }
+        }
+        await api('/api/floor/counts', { method: 'PUT', body: { date: state.date, time_slot: state.slot, table_id: tableId, reservation_id: rid, counts } });
+        await load();
+        m.close();
+        const s = splitCounts().summary[rid];
+        toast(s && s.assigned !== s.total ? `保存しました(卓の合計 ${s.assigned}名 / 予約 ${s.total}名)` : '保存しました');
+        return onTableClick(tableId);  // 新しい割り振りで開き直す
+      }
       if (b.dataset.ti === 'memo') {
         const memo = m.querySelector(`[data-memo="${rid}"]`).value;
         await api('/api/floor/memo', { method: 'PUT', body: { date: state.date, time_slot: state.slot, table_id: tableId, reservation_id: rid, memo } });

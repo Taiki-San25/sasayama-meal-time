@@ -118,3 +118,15 @@ body.dragging,body.dragging *{cursor:grabbing !important}
 .tiMemo textarea{width:100%;min-height:52px;resize:vertical;font:inherit;font-size:13px;box-sizing:border-box}
 .tiMemoFoot{display:flex;justify-content:flex-end;margin-top:6px}
 .tiMemoFoot .btn{height:30px;padding:0 12px;font-size:12px}
+/* 複数卓に分けた予約の卓ごとの人数 */
+.tiCounts{margin-top:8px;padding:8px 10px;background:#f4f8fc;border:1px solid #d6e4f2;border-radius:8px}
+.tcHead{display:flex;align-items:baseline;gap:8px;font-size:12px;color:#0c447c;margin-bottom:6px}
+.tcMode{font-size:11px;padding:0 6px;border-radius:999px;background:#e6f1fb;color:#185fa5}
+.tcMode.fixed{background:#185fa5;color:#fff}
+.tcInputs{display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap}
+.tcInputs label{display:grid;gap:2px;font-size:11px;color:#555}
+.tcInputs input{width:64px;height:30px;text-align:right;font:inherit}
+.tcInputs .btn{height:30px;padding:0 10px;font-size:12px}
+.tcSum{margin:6px 0 0;font-size:12px;color:#555}
+.tcSum.ng{color:#c0392b;font-weight:700}
+.rcSplitNg{display:inline-block;font-size:11px;padding:0 6px;border-radius:999px;background:#fdecea;color:#c0392b;border:1px solid #f0b4ab}
