@@ -285,8 +285,8 @@
   }
 
   // ステータス: レストランは(削除済み以外)チェックボックス、他ロールは表示のみ
-  // 朝食: 入場を数える人数(大人+幼児。席のみは除く)と、入場した人数
-  const entryTotal = r => r.adults + r.children;
+  // 朝食: 入場を数える人数(大人+幼児+席のみ)と、入場した人数
+  const entryTotal = r => r.adults + r.children + r.infants;
   const entryCount = r => r.entered_count ?? (r.entered_at ? (entryTotal(r) || 1) : 0);
   function statusCell(r) {
     if (MEAL === 'breakfast') return breakfastStatus(r);

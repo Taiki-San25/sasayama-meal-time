@@ -72,6 +72,7 @@ async def lifespan(_app):
     init_db()
     migrate_floor_layouts()
     migrate_assignment_counts()
+    migrate_entry_counts()
     bootstrap_admin()
     bootstrap_developer()
     yield
@@ -480,8 +481,8 @@ class EnteredIn(BaseModel):
 
 
 def entry_total(r: Reservation) -> int:
-    """入場を数える人数(大人+幼児。席のみは朝食を食べないので除く)"""
-    return r.adults + r.children
+    """入場を数える人数(大人+幼児+席のみ)"""
+    return r.adults + r.children + r.infants
 
 
 def entry_values(r: Reservation, count: int, user: User) -> dict:
@@ -659,6 +660,22 @@ def migrate_assignment_counts() -> None:
         s.commit()
         if changed:
             print(f"[info] 卓の人数が未設定の割り当て {changed} 件に人数を入れました")
+
+
+def migrate_entry_counts() -> None:
+    """朝食の入場人数に席のみも数えるようにしたため、入場済の予約の入場人数を新しい合計に合わせる"""
+    with SessionLocal() as s:
+        rows = list(s.scalars(select(Reservation).where(
+            Reservation.meal == "breakfast", Reservation.entered_at.is_not(None), Reservation.entered_count.is_not(None))))
+        n = 0
+        for r in rows:
+            total = r.adults + r.children + r.infants
+            if total and r.entered_count < total:
+                r.entered_count = total
+                n += 1
+        s.commit()
+        if n:
+            print(f"[info] 朝食の入場済 {n} 件の入場人数を席のみを含む人数に合わせました")
 
 
 def table_names(db: Session, d: date) -> dict[str, str]:
