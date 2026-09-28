@@ -71,6 +71,7 @@ async def lifespan(_app):
         raise RuntimeError("DATABASE_URL が未設定です。Render で PostgreSQL を接続してください")
     init_db()
     migrate_floor_layouts()
+    migrate_assignment_counts()
     bootstrap_admin()
     bootstrap_developer()
     yield
@@ -435,6 +436,8 @@ def update_reservation(meal: str, rid: int, body: ReservationIn, user: User = De
     change(db, r, values, user)
     if old_time != r.time_slot:
         release_tables(db, r, user)
+    else:
+        reconcile_tables(db, r, user)
     if old_group and old_group != r.group_id:
         shrink_group(db, old_group, user)
     db.commit()
@@ -465,6 +468,7 @@ def set_counts(meal: str, rid: int, body: CountsIn, user: User = Depends(current
     """人数(大人・幼児・席のみ)だけを更新する。管理表の一覧から直接入力するとき用"""
     r = get_reservation(db, check_meal(meal), rid)
     change(db, r, body.model_dump(), user)
+    reconcile_tables(db, r, user)
     db.commit()
     return to_dict(r, user_names(db))
 
@@ -588,6 +592,31 @@ def migrate_floor_layouts() -> None:
             row.version = floor.LAYOUT_VERSION
             print(f"[info] テーブル配置({row.date or '基本'})を新しい見取り図に移し替えました")
         s.commit()
+
+
+def migrate_assignment_counts() -> None:
+    """卓の人数が未設定(以前の自動割り振り)の割り当てに、残りを均等に割った人数を入れる"""
+    with SessionLocal() as s:
+        rows = list(s.scalars(select(TableAssignment)))
+        groups: dict[tuple, list[TableAssignment]] = {}
+        for a in rows:
+            groups.setdefault((a.date, a.time_slot, a.reservation_id), []).append(a)
+        changed = 0
+        for (d, _, rid), g in groups.items():
+            auto = [a for a in g if a.adults is None]
+            r = s.get(Reservation, rid)
+            if not auto or not r:
+                continue
+            order = {t["id"]: i for i, t in enumerate(effective_tables(s, d)[0])}
+            auto.sort(key=lambda a: order.get(a.table_id, 999))
+            for k in COUNT_KEYS:
+                rest = max(0, getattr(r, k) - sum(getattr(a, k) or 0 for a in g if a.adults is not None))
+                for i, a in enumerate(auto):
+                    setattr(a, k, rest // len(auto) + (1 if i < rest % len(auto) else 0))
+            changed += len(auto)
+        s.commit()
+        if changed:
+            print(f"[info] 卓の人数が未設定の割り当て {changed} 件に人数を入れました")
 
 
 def table_names(db: Session, d: date) -> dict[str, str]:
@@ -722,6 +751,58 @@ def assign_target(db: Session, d: date, table_id: str) -> None:
         raise HTTPException(400, "テーブルが見つかりません")
 
 
+COUNT_KEYS = ("adults", "children", "infants")  # 席を使う人(大人・幼児・席のみ)
+
+
+def people_of(x) -> int:
+    return sum(getattr(x, k) or 0 for k in COUNT_KEYS)
+
+
+def table_info(db: Session, d: date, table_id: str) -> dict:
+    return next(t for t in effective_tables(db, d)[0] if t["id"] == table_id)
+
+
+def table_used(db: Session, d: date, time_slot: str, table_id: str, exclude: set[int] = frozenset()) -> int:
+    return sum(people_of(a) for a in assigned(db, d, time_slot, table_id) if a.id not in exclude)
+
+
+def reservation_rows(db: Session, r: Reservation) -> list[TableAssignment]:
+    """予約の、今の時間枠の割り当て(配置の並び順)"""
+    order = {t["id"]: i for i, t in enumerate(effective_tables(db, r.date)[0])}
+    rows = list(db.scalars(select(TableAssignment).where(
+        TableAssignment.reservation_id == r.id, TableAssignment.date == r.date,
+        TableAssignment.time_slot == (r.time_slot or ""))))
+    return sorted(rows, key=lambda a: order.get(a.table_id, 999))
+
+
+def remaining_of(r: Reservation, rows: list[TableAssignment]) -> dict[str, int]:
+    return {k: max(0, getattr(r, k) - sum(getattr(a, k) or 0 for a in rows)) for k in COUNT_KEYS}
+
+
+def reconcile_tables(db: Session, r: Reservation, user: User) -> None:
+    """予約の人数が減ったら、後ろの卓から減らす(0名になった卓は外す)。増えた分は未アサインとして残る"""
+    if r.meal != "dinner":
+        return
+    rows = reservation_rows(db, r)
+    if not rows:
+        return
+    before = reservation_tables(db, r.date).get(r.id, [])
+    for k in COUNT_KEYS:
+        excess = sum(getattr(a, k) or 0 for a in rows) - getattr(r, k)
+        for a in reversed(rows):
+            if excess <= 0:
+                break
+            cut = min(excess, getattr(a, k) or 0)
+            setattr(a, k, (getattr(a, k) or 0) - cut)
+            excess -= cut
+    if people_of(r):
+        for a in rows:
+            if not people_of(a):
+                db.delete(a)
+    db.flush()
+    record_tables(db, r, user, before)
+
+
 def assigned(db: Session, d: date, time_slot: str, table_id: str, rid: int | None = None) -> list[TableAssignment]:
     q = select(TableAssignment).where(TableAssignment.date == d, TableAssignment.time_slot == time_slot,
                                       TableAssignment.table_id == table_id)
@@ -743,16 +824,36 @@ def floor_assign(body: AssignIn, user: User = Depends(current_user), db: Session
     if r.date != body.date or r.time_slot != body.time_slot:
         raise HTTPException(400, "予約の日付・時間が一致しません。画面を更新してください")
     assign_target(db, body.date, body.table_id)
-    if assigned(db, body.date, body.time_slot, body.table_id, r.id):
-        return {"ok": True}  # すでにこの卓に割り当て済み
+    rows = reservation_rows(db, r)
+    here = next((a for a in rows if a.table_id == body.table_id), None)
+    rest = remaining_of(r, rows)
+    take = dict.fromkeys(COUNT_KEYS, 0)
+    t = table_info(db, body.date, body.table_id)
+    if people_of(r) == 0:  # 人数未入力の予約は1卓だけ(人数0で)置ける
+        if rows:
+            raise HTTPException(400, "人数が未入力の予約は1つの卓にしか割り当てられません")
+    else:
+        if not sum(rest.values()):
+            raise HTTPException(400, "この予約は全員が卓に割り当て済みです")
+        free = t["seats"] - table_used(db, body.date, body.time_slot, body.table_id)
+        if free <= 0:
+            raise HTTPException(400, f"卓{t['name']}({t['seats']}名)は満席です")
+        for k in COUNT_KEYS:  # 大人→幼児→席のみの順に座らせる
+            take[k] = min(rest[k], free)
+            free -= take[k]
     freeze_layout(db, body.date, user)
     before = reservation_tables(db, body.date).get(r.id, [])
-    db.add(TableAssignment(date=body.date, time_slot=body.time_slot, table_id=body.table_id,
-                           reservation_id=r.id, created_at=now_jst(), created_by=user.id))
+    if here:
+        for k in COUNT_KEYS:
+            setattr(here, k, (getattr(here, k) or 0) + take[k])
+    else:
+        db.add(TableAssignment(date=body.date, time_slot=body.time_slot, table_id=body.table_id,
+                               reservation_id=r.id, created_at=now_jst(), created_by=user.id, **take))
     db.flush()
     record_tables(db, r, user, before)
     db.commit()
-    return {"ok": True}
+    return {"ok": True, "table": t["name"], "taken": sum(take.values()),
+            "remaining": sum(rest.values()) - sum(take.values())}
 
 
 def find_assignments(db: Session, body: UnassignIn) -> list[TableAssignment]:
@@ -782,17 +883,18 @@ def floor_move(body: MoveIn, user: User = Depends(current_user), db: Session = D
     assign_target(db, body.date, body.to_table_id)
     if body.to_table_id == body.table_id:
         return {"ok": True}
+    t = table_info(db, body.date, body.to_table_id)
+    need = sum(people_of(a) for a in rows)
+    free = t["seats"] - table_used(db, body.date, body.time_slot, body.to_table_id)
+    if need > free:
+        raise HTTPException(400, f"卓{t['name']}の空席が足りません(空席{max(free, 0)}名 / 移動する人数{need}名)")
     before = reservation_tables(db, body.date)
     for a in rows:
         dest = assigned(db, body.date, body.time_slot, body.to_table_id, a.reservation_id)
         if dest:  # 移動先にもう同じ予約がいれば1つにまとめる(卓メモもつなげて残す)
             dest[0].memo = "\n".join(m for m in (dest[0].memo, a.memo) if m)
-            # 卓の人数: 両方とも指定済みなら足す。どちらかが自動なら自動に戻す
-            if dest[0].adults is not None and a.adults is not None:
-                for k in ("adults", "children", "infants"):
-                    setattr(dest[0], k, (getattr(dest[0], k) or 0) + (getattr(a, k) or 0))
-            else:
-                dest[0].adults = dest[0].children = dest[0].infants = None
+            for k in COUNT_KEYS:  # 卓の人数も足す
+                setattr(dest[0], k, (getattr(dest[0], k) or 0) + (getattr(a, k) or 0))
             db.delete(a)
         else:
             a.table_id = body.to_table_id  # 卓メモはそのまま引き継ぐ
@@ -831,22 +933,33 @@ class TableCountsIn(BaseModel):
     time_slot: str
     table_id: str
     reservation_id: int
-    counts: CountsIn | None = None  # None = 自動に戻す
+    counts: CountsIn
 
 
 @app.put("/api/floor/counts")
 def floor_counts(body: TableCountsIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
-    """複数卓に分けた予約の、この卓の人数(大人・幼児・席のみ)を決める。None で自動の割り振りに戻す"""
+    """この卓に座る人数(大人・幼児・席のみ)を変える。卓の席数と予約の人数を超えられない"""
     rows = assigned(db, body.date, body.time_slot, body.table_id, body.reservation_id)
     if not rows:
         raise HTTPException(400, "割り当てが見つかりません。画面を更新してください")
     a = rows[0]
-    new = body.counts.model_dump() if body.counts else {"adults": None, "children": None, "infants": None}
-    old = {"adults": a.adults, "children": a.children, "infants": a.infants}
+    r = db.get(Reservation, a.reservation_id)
+    new = body.counts.model_dump()
+    t = table_info(db, body.date, body.table_id)
+    if sum(new.values()) + table_used(db, body.date, body.time_slot, body.table_id, {a.id}) > t["seats"]:
+        raise HTTPException(400, f"卓{t['name']}の席数({t['seats']}名)を超えます")
+    others = [x for x in reservation_rows(db, r) if x.id != a.id]
+    labels = {"adults": "大人", "children": "幼児", "infants": "席のみ"}
+    for k in COUNT_KEYS:
+        if new[k] + sum(getattr(x, k) or 0 for x in others) > getattr(r, k):
+            raise HTTPException(400, f"予約の{labels[k]}({getattr(r, k)}名)を超えます")
+    if people_of(r) and not sum(new.values()):
+        raise HTTPException(400, "0名にはできません。卓から外す場合は「外す」を使ってください")
+    old = {k: getattr(a, k) for k in COUNT_KEYS}
     if old != new:
         for k, v in new.items():
             setattr(a, k, v)
-        fmt = lambda c: "自動" if c["adults"] is None else f"大人{c['adults']} 幼児{c['children']} 席のみ{c['infants']}"
+        fmt = lambda c: f"大人{c['adults'] or 0} 幼児{c['children'] or 0} 席のみ{c['infants'] or 0}"
         record(db, db.get(Reservation, a.reservation_id), user, "table_counts",
                {"table": table_names(db, body.date).get(body.table_id, ""), "before": fmt(old), "after": fmt(new)})
         db.commit()
