@@ -375,8 +375,12 @@ def list_reservations(meal: str, d: date, include_deleted: bool = False, _: User
     rows = [to_dict(r, names) for r in db.scalars(q.order_by(Reservation.room, Reservation.id))]
     if meal == "dinner":
         tables = reservation_tables(db, d)
+        # 卓メモは中身を出さず、あるかどうかだけ(時間変更・削除でメモが消える前の確認用)
+        memo_ids = set(db.scalars(select(TableAssignment.reservation_id).where(
+            TableAssignment.date == d, TableAssignment.memo != "")))
         for r in rows:
             r["tables"] = tables.get(r["id"], [])
+            r["has_table_memo"] = r["id"] in memo_ids
     return rows
 
 
@@ -639,7 +643,8 @@ def floor_view(d: date, user: User = Depends(current_user), db: Session = Depend
         "tables": tables, "own_layout": own, "can_edit_layout": user.role in LAYOUT_ROLES,
         "slots": slot_labels(db, "dinner"),
         "reservations": [to_dict(r, names) for r in rows],
-        "assignments": [{"time_slot": a.time_slot, "table_id": a.table_id, "reservation_id": a.reservation_id}
+        "assignments": [{"time_slot": a.time_slot, "table_id": a.table_id, "reservation_id": a.reservation_id,
+                         "memo": a.memo or ""}
                         for a in db.scalars(select(TableAssignment).where(TableAssignment.date == d))],
     }
 
@@ -777,14 +782,39 @@ def floor_move(body: MoveIn, user: User = Depends(current_user), db: Session = D
         return {"ok": True}
     before = reservation_tables(db, body.date)
     for a in rows:
-        if assigned(db, body.date, body.time_slot, body.to_table_id, a.reservation_id):
+        dest = assigned(db, body.date, body.time_slot, body.to_table_id, a.reservation_id)
+        if dest:  # 移動先にもう同じ予約がいれば1つにまとめる(卓メモもつなげて残す)
+            dest[0].memo = "\n".join(m for m in (dest[0].memo, a.memo) if m)
             db.delete(a)
         else:
-            a.table_id = body.to_table_id
+            a.table_id = body.to_table_id  # 卓メモはそのまま引き継ぐ
     db.flush()
     for a in rows:
         record_tables(db, db.get(Reservation, a.reservation_id), user, before.get(a.reservation_id, []))
     db.commit()
+    return {"ok": True}
+
+
+class MemoIn(BaseModel):
+    date: date
+    time_slot: str
+    table_id: str
+    reservation_id: int
+    memo: str = Field(default="", max_length=500)
+
+
+@app.put("/api/floor/memo")
+def floor_memo(body: MemoIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """卓に入った予約ごとのメモ。中身はテーブルアサインページでのみ表示し、ログには変更したことだけ残す"""
+    rows = assigned(db, body.date, body.time_slot, body.table_id, body.reservation_id)
+    if not rows:
+        raise HTTPException(400, "割り当てが見つかりません。画面を更新してください")
+    a, memo = rows[0], body.memo.strip()
+    if (a.memo or "") != memo:
+        a.memo = memo
+        record(db, db.get(Reservation, a.reservation_id), user, "table_memo",
+               {"table": table_names(db, body.date).get(body.table_id, "")})
+        db.commit()
     return {"ok": True}
 
 
@@ -1225,7 +1255,7 @@ FIELD_LABELS = {
     "allergy": "アレルギー", "note": "備考", "group_id": "グループ", "entered_at": "ステータス",
     "tables": "テーブル",
 }
-RES_ACTIONS = {"create": "登録", "update": "変更", "delete": "削除", "restore": "復元",
+RES_ACTIONS = {"create": "登録", "update": "変更", "delete": "削除", "restore": "復元", "table_memo": "卓メモを変更",
                "import": "CSV取込", "import_update": "CSV取込(更新)"}
 AUTH_ACTIONS = {"login": "ログイン", "login_failed": "ログイン失敗", "logout": "ログアウト",
                 "password_change": "パスワード変更"}
@@ -1277,7 +1307,8 @@ def operation_logs(start: date, end: date, _: User = Depends(current_user), db: 
             "action": "入場済" if set(h.changes) == {"entered_at"} else RES_ACTIONS.get(h.action, h.action),
             "target": f"{MEAL_LABELS.get(r.meal, '')} {r.date:%m/%d} {r.room} {r.guest_name}".strip(),
             "link": f"/{r.meal}?d={r.date.isoformat()}&hl={r.id}",
-            "detail": change_detail(h.action, h.changes or {}), **who(h.changed_by)})
+            "detail": f"卓 {(h.changes or {}).get('table', '')}" if h.action == "table_memo"
+                      else change_detail(h.action, h.changes or {}), **who(h.changed_by)})
     # チャット(取り消されたメッセージの本文はログにも出さない)
     chat_q = select(ChatMessage).where(
         ((ChatMessage.created_at >= t0) & (ChatMessage.created_at < t1)) |

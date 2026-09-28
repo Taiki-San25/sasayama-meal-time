@@ -159,6 +159,7 @@ class TableAssignment(Base):
     time_slot: Mapped[str] = mapped_column(String(16))
     table_id: Mapped[str] = mapped_column(String(32))
     reservation_id: Mapped[int] = mapped_column(ForeignKey("reservations.id"), index=True)
+    memo: Mapped[str] = mapped_column(Text, default="")  # 卓メモ(テーブルアサインページでのみ表示。割り当てを外すと消える)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_jst)
     created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
 
@@ -173,6 +174,7 @@ ADDED_COLUMNS = [
     ("reservations", "entered_at", "TIMESTAMP", None),
     ("reservations", "entered_by", "INTEGER", None),
     ("floor_layouts", "version", "INTEGER NOT NULL DEFAULT 1", None),
+    ("table_assignments", "memo", "TEXT NOT NULL DEFAULT ''", None),
     ("reservations", "ext_key", "VARCHAR(64)", "CREATE INDEX IF NOT EXISTS ix_reservations_ext_key ON reservations (ext_key)"),
 ]
 # 使わなくなって削除した列: (テーブル, 列)。起動時に残っていれば消す

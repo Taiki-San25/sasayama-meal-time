@@ -103,3 +103,9 @@ body.dragging,body.dragging *{cursor:grabbing !important}
 .rcNoCount{display:inline-block;font-size:11px;padding:0 6px;border-radius:999px;background:#faeeda;color:#854f0b;border:1px solid #ef9f27}
 .tbl.noCount .tPeople{fill:#a55a00;font-weight:700}
 .tbl.full.noCount .tPeople{fill:#c0392b}
+/* 卓メモ */
+.tbl .tMemo{font-size:11px;font-weight:700;fill:#a55a00;text-anchor:middle}
+.tiMemo{display:grid;gap:4px;margin-top:6px;font-size:12px;color:#555}
+.tiMemo textarea{width:100%;min-height:44px;resize:vertical;font:inherit;font-size:13px;box-sizing:border-box}
+.tiMain > .btn{margin-top:4px;height:28px;padding:0 10px;font-size:12px}
+.tiRow .tiMain{flex:1;min-width:0}

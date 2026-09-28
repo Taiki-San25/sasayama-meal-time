@@ -188,6 +188,7 @@
       return `<g class="${cls}" data-table="${t.id}" tabindex="0" role="button" aria-label="${esc(label)}">
         <title>${esc(label)}</title>
         <rect x="${t.x}" y="${t.y}" width="${t.w}" height="${t.h}" rx="6"/>
+        ${!state.edit && slotAssign().some(a => a.table_id === t.id && a.memo) ? `<text class="tMemo" x="${t.x + t.w / 2}" y="${t.y - 4}">メモあり</text>` : ''}
         <text class="tName" x="${t.x + 5}" y="${t.y + 14}">${esc(t.name)}${allIn ? '<tspan class="tIn"> ✓</tspan>' : someIn ? '<tspan class="tIn"> (✓)</tspan>' : ''}</text>
         <text class="tSeats" x="${t.x + t.w - 4}" y="${t.y + 14}">${t.seats}名</text>
         ${rs.length ? `<text class="tRoom" x="${t.x + t.w / 2}" y="${t.y + 33}">${esc(fit(rooms, t.w))}</text>
@@ -221,6 +222,7 @@
   }
 
   const resAt = tableId => (tableLoads()[tableId] || { rs: [] }).rs;
+  const memoOf = (tableId, rid) => (slotAssign().find(a => a.table_id === tableId && a.reservation_id === rid) || {}).memo || '';
 
   function onTableClick(tableId) {
     if (state.edit) return toggleEditSel(tableId);
@@ -243,7 +245,9 @@
             ${r.entered_at ? '<span class="rcEntered">入場済</span>' : ''}</p>
           <p class="muted">大人${r.adults} 幼児${r.children} 席のみ${r.infants}　卓: ${tablesOfRes(r.id).map(esc).join('・')}</p>
           ${r.allergy ? `<p class="allergy"><i class="ti ti-alert-triangle"></i>${esc(r.allergy)}</p>` : ''}
-          ${r.note ? `<p class="muted">備考: ${esc(r.note)}</p>` : ''}</div>
+          ${r.note ? `<p class="muted">備考: ${esc(r.note)}</p>` : ''}
+          <label class="tiMemo">卓メモ(このページでのみ表示)<textarea data-memo="${r.id}" maxlength="500" rows="2" placeholder="例: 窓側希望、記念日のケーキ">${esc(memoOf(tableId, r.id))}</textarea></label>
+          <button type="button" class="btn" data-ti="memo" data-rid="${r.id}"><i class="ti ti-device-floppy"></i>メモを保存</button></div>
           <div class="tiBtns">
             <button type="button" class="btn" data-ti="move" data-rid="${r.id}">別の卓へ移動</button>
             <button type="button" class="btn" data-ti="add" data-rid="${r.id}">卓を追加</button>
@@ -252,10 +256,19 @@
       buttons: [{ label: '閉じる' }].concat(rs.length > 1
         ? [{ label: 'この卓の全員を移動', primary: true, onClick: () => { state.moveFrom = { table: tableId }; state.selected = null; render(); } }] : []),
     });
-    m.querySelector('.tblInfo').addEventListener('click', e => {
+    m.querySelector('.tblInfo').addEventListener('click', async e => {
       const b = e.target.closest('[data-ti]');
       if (!b) return;
       const rid = +b.dataset.rid;
+      if (b.dataset.ti === 'memo') {
+        const memo = m.querySelector(`[data-memo="${rid}"]`).value;
+        await api('/api/floor/memo', { method: 'PUT', body: { date: state.date, time_slot: state.slot, table_id: tableId, reservation_id: rid, memo } });
+        toast(memo.trim() ? 'メモを保存しました' : 'メモを消しました');
+        await load();
+        return;
+      }
+      if (b.dataset.ti === 'remove' && memoOf(tableId, rid) && !(await confirmDialog({
+        title: '卓メモの削除', message: 'この卓から外すと、入力されている卓メモも削除されます。外しますか？', ok: '外す(メモも削除)', danger: true }))) return;
       m.close();
       if (b.dataset.ti === 'remove') unassign(tableId, rid).catch(() => {});
       else if (b.dataset.ti === 'move') { state.moveFrom = { table: tableId, rid }; state.selected = null; render(); }
@@ -558,21 +571,22 @@
       e.sel = new Set(parts.map(p => p.id));
       e.dirty = true;
     } else if (act === 'delete') {
-      const n = dayAssigned(sel.map(t => t.id)).length;
-      if (n && !(await confirmDialog({ title: '卓の削除', message: `割り当て済みの予約が${n}件あります。保存すると割り当てが外れます。削除しますか？`, ok: '削除する', danger: true }))) return;
+      const gone = dayAssigned(sel.map(t => t.id)), n = gone.length, memos = gone.filter(a => a.memo).length;
+      if (n && !(await confirmDialog({ title: '卓の削除', message: `割り当て済みの予約が${n}件あります${memos ? `(うち卓メモあり${memos}件)` : ''}。保存すると割り当て${memos ? 'と卓メモ' : ''}が外れます。削除しますか？`, ok: '削除する', danger: true }))) return;
       e.tables = e.tables.filter(t => !e.sel.has(t.id));
       e.sel = new Set();
       e.dirty = true;
     } else if (act === 'copyPrev') {
       const prev = await api(`/api/floor?d=${addDays(state.date, -1)}`);
-      const gone = state.data.assignments.filter(a => !prev.tables.some(t => t.id === a.table_id)).length;
-      if (gone && !(await confirmDialog({ title: '前日の配置をコピー', message: `前日にない卓の割り当て${gone}件は、保存すると外れます。コピーしますか？`, ok: 'コピーする' }))) return;
+      const lost = state.data.assignments.filter(a => !prev.tables.some(t => t.id === a.table_id));
+      const gone = lost.length, memos = lost.filter(a => a.memo).length;
+      if (gone && !(await confirmDialog({ title: '前日の配置をコピー', message: `前日にない卓の割り当て${gone}件${memos ? `(うち卓メモあり${memos}件)` : ''}は、保存すると外れます${memos ? '(卓メモも削除)' : ''}。コピーしますか？`, ok: 'コピーする' }))) return;
       e.tables = clone(prev.tables);
       e.sel = new Set();
       e.dirty = true;
       toast('前日の配置をコピーしました。保存すると反映されます');
     } else if (act === 'reset') {
-      if (!(await confirmDialog({ title: '基本に戻す', message: 'この日の配置を基本レイアウトに戻します。基本にない卓の割り当ては外れます。よろしいですか？', ok: '基本に戻す', danger: true }))) return;
+      if (!(await confirmDialog({ title: '基本に戻す', message: 'この日の配置を基本レイアウトに戻します。基本にない卓の割り当ては外れ、その卓メモも削除されます。よろしいですか？', ok: '基本に戻す', danger: true }))) return;
       const r = await api(`/api/floor/layout?d=${state.date}`, { method: 'DELETE' });
       toast(r.released ? `基本に戻しました(割り当て${r.released}件を外しました)` : '基本に戻しました');
       state.edit = null;

@@ -117,7 +117,7 @@
   const FIELD_LABELS = { date: '日付', time_slot: '時間', room: '部屋', guest_name: '代表者名', adults: '大人',
     children: '幼児', infants: '席のみ', tables: 'テーブル', nights: '泊数', night_no: '何泊目', group_id: 'グループ', entered_at: 'ステータス', allergy: 'アレルギー', note: '備考' };
   const nightsLabel = r => `${r.night_no}泊/${r.nights}泊`;
-  const ACTION_LABELS = { create: '登録', update: '変更', delete: '削除', restore: '復元', import: 'CSV取込', import_update: 'CSV取込(更新)' };
+  const ACTION_LABELS = { create: '登録', update: '変更', delete: '削除', restore: '復元', import: 'CSV取込', import_update: 'CSV取込(更新)', table_memo: '卓メモを変更' };
   // 複数部屋(「, 」区切り)は「115 他14室」と表示し、ホバーで全室
   const splitRooms = room => room.split(/\s*,\s*/).filter(Boolean);
   const roomText = room => { const rs = splitRooms(room); return rs.length > 1 ? `${rs[0]} 他${rs.length - 1}室` : room; };
@@ -333,6 +333,8 @@
               message: '時間が「未定」のまま登録しようとしています。このまま登録しますか？',
               ok: '未定のまま登録', cancel: '戻って時間を選ぶ',
             }))) { f.time_slot.focus(); return false; }
+            if (!isNew && r.has_table_memo && (f.time_slot.value || null) !== r.time_slot
+              && !(await confirmMemoLoss('時間を変更すると'))) return false;
             const body = {
               time_slot: f.time_slot.value || null,
               room: f.room.value, guest_name: f.guest_name.value,
@@ -389,14 +391,15 @@
       const hist = await api(`/api/${MEAL}/reservations/${r.id}/history`);
       box.innerHTML = hist.map(h => {
         // 登録時は入力された項目だけ表示
-        const entries = Object.entries(h.changes || {})
+        // 卓メモは中身を出さず、どの卓かだけ
+        const entries = h.action === 'table_memo' ? [] : Object.entries(h.changes || {})
           .filter(([, [, v]]) => !['create', 'import'].includes(h.action) || (v !== '' && v !== null && v !== 0));
         const detail = entries.map(([f, [a, b]]) => `<li><b>${FIELD_LABELS[f] || esc(f)}</b>: ${['create', 'import'].includes(h.action)
           ? esc(fmtVal(f, b))
           : `${esc(fmtVal(f, a))} → ${esc(fmtVal(f, b))}`}</li>`).join('');
         return `<div class="hItem hi-${h.action}">
           <div class="hHead"><span class="hAct">${ACTION_LABELS[h.action] || esc(h.action)}</span>${fmtTs(h.changed_at)}　${esc(h.changed_by) || '-'}</div>
-          ${detail ? `<ul>${detail}</ul>` : ''}</div>`;
+          ${detail ? `<ul>${detail}</ul>` : ''}${h.action === 'table_memo' ? `<ul><li>卓 ${esc(h.changes?.table || '')}(内容はテーブルアサインで確認)</li></ul>` : ''}</div>`;
       }).join('') || '<p class="muted">履歴はありません</p>';
     } catch (e) { box.textContent = '履歴を読み込めませんでした'; }
   }
@@ -427,6 +430,11 @@
   }
 
   // はい/いいえの確認。閉じ方に関わらず結果を返す
+  // テーブルアサインの卓メモ(中身はこの画面では見せない)が消えるときの確認
+  const confirmMemoLoss = what => confirmDialog({
+    title: '卓メモの削除', message: `${what}テーブルの割り当てが外れ、テーブルアサインで入力された卓メモも削除されます。よろしいですか？`,
+    ok: '続ける(メモも削除)', danger: true });
+
   function confirmDialog({ title, message, note, ok, cancel = 'キャンセル', danger }) {
     return new Promise(resolve => {
       let yes = false;
@@ -443,7 +451,8 @@
     const ok = await confirmDialog({
       title: '予約を削除',
       message: `${esc(roomText(r.room))} ${esc(r.guest_name)} 様の予約を削除します。よろしいですか？`,
-      note: '削除した予約は「削除済みも表示」から閲覧・復元できます。',
+      note: '削除した予約は「削除済みも表示」から閲覧・復元できます。'
+        + (r.has_table_memo ? ' テーブルの割り当てと卓メモは削除され、復元しても戻りません。' : ''),
       ok: '削除する', danger: true,
     });
     if (!ok) return false;
@@ -519,6 +528,8 @@
   tbody.addEventListener('change', async e => {
     if (!e.target.classList.contains('slotSel')) return;
     const id = +e.target.closest('tr').dataset.id;
+    const cur = state.rows.find(r => r.id === id);
+    if (cur && cur.has_table_memo && !(await confirmMemoLoss('時間を変更すると'))) return render();
     try {
       const updated = await api(`/api/${MEAL}/reservations/${id}/time`, { method: 'PATCH', body: { time_slot: e.target.value || null } });
       state.rows = state.rows.map(r => r.id === id ? updated : r);
