@@ -70,6 +70,7 @@ async def lifespan(_app):
         # 消えるディスク上の SQLite や開発用 admin/admin で本番起動しないよう止める
         raise RuntimeError("DATABASE_URL が未設定です。Render で PostgreSQL を接続してください")
     init_db()
+    migrate_floor_layouts()
     bootstrap_admin()
     bootstrap_developer()
     yield
@@ -539,6 +540,17 @@ def save_layout(db: Session, d: date | None, tables: list[dict], user: User) -> 
         row = FloorLayout(date=d)
         db.add(row)
     row.tables, row.updated_at, row.updated_by = tables, now_jst(), user.id
+    row.version = floor.LAYOUT_VERSION
+
+
+def migrate_floor_layouts() -> None:
+    """見取り図を変えたとき、保存済みの配置(基本・日ごと)を新しい見取り図に移し替える"""
+    with SessionLocal() as s:
+        for row in s.scalars(select(FloorLayout).where(FloorLayout.version < floor.LAYOUT_VERSION)):
+            row.tables = floor.migrate_tables(row.tables, row.version, row.date is None)
+            row.version = floor.LAYOUT_VERSION
+            print(f"[info] テーブル配置({row.date or '基本'})を新しい見取り図に移し替えました")
+        s.commit()
 
 
 def table_names(db: Session, d: date) -> dict[str, str]:

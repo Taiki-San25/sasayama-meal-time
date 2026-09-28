@@ -26,19 +26,17 @@
     edit: null,         // 配置編集中: { target: 'day'|'base', tables: [...], sel: Set }
   };
 
-  // 見取り図の壁・設備(添付の見取り図を簡易的に再現)。座標は 1000×640
+  // 見取り図の壁・設備(添付の見取り図を簡易的に再現)。座標は 1000×460(サーバーの floor.py と同じ)
   const WALLS = `
-    <path class="wall" d="M42 210 H640 V610 H42 Z"/>
-    <path class="wall" d="M662 42 H998 V200 H662 Z"/>
-    <path class="wall" d="M662 212 H998 V320 H700"/>
-    <path class="wall" d="M700 212 V320"/>
-    <path class="wall thin" d="M960 380 V610 M960 420 H998 M960 460 H998 M960 500 H998 M960 540 H998 M960 580 H998"/>
-    <path class="fixture" d="M168 214 H578 V294 H548 V244 H198 V294 H168 Z"/>
-    <rect class="fixture" x="204" y="332" width="332" height="68" rx="4"/>
-    <text class="label" x="370" y="372">四季の蔵</text>
-    <text class="label small" x="373" y="236">カウンター</text>
-    <text class="label small" x="975" y="30">ENT</text>
-    <text class="label small" x="979" y="400">階段</text>`;
+    <path class="wall" d="M42 30 H640 V430 H42 Z"/>
+    <path class="wall" d="M662 30 H998 V330 H662 Z"/>
+    <path class="wall thin" d="M900 350 V450 M900 370 H998 M900 390 H998 M900 410 H998 M900 430 H998"/>
+    <path class="fixture" d="M168 34 H578 V114 H548 V64 H198 V114 H168 Z"/>
+    <rect class="fixture" x="204" y="152" width="332" height="68" rx="4"/>
+    <text class="label" x="370" y="188">四季の蔵</text>
+    <text class="label small" x="373" y="54">カウンター</text>
+    <text class="label small" x="975" y="20">ENT</text>
+    <text class="label small" x="870" y="402">階段</text>`;
 
   root.innerHTML = `
     <div class="flBar noPrint">
@@ -60,7 +58,7 @@
     <div class="flBody">
       <div class="flMapWrap">
         <p class="flHint noPrint" id="flHint"></p>
-        <svg id="flMap" class="flMap" viewBox="0 0 1000 640" role="img" aria-label="テーブル配置図"></svg>
+        <svg id="flMap" class="flMap" viewBox="0 0 1000 460" role="img" aria-label="テーブル配置図"></svg>
       </div>
       <aside class="flList noPrint" id="flList"></aside>
     </div>`;
@@ -75,6 +73,7 @@
     const d = await api(`/api/floor?d=${state.date}`);
     if (seq !== loadSeq) return;
     state.data = d;
+    map.setAttribute('viewBox', `0 0 ${d.canvas.w} ${d.canvas.h}`);
     if (!d.slots.includes(state.slot)) state.slot = d.slots[0] || '';
     render();
   }
@@ -300,8 +299,8 @@
     if (drag.kind === 'layout') {
       const t = state.edit.tables.find(x => x.id === drag.id);
       const p = toCanvas(e.clientX, e.clientY);
-      t.x = Math.max(0, Math.min(1000 - t.w, Math.round((p.x - drag.ox) / SNAP) * SNAP));
-      t.y = Math.max(0, Math.min(640 - t.h, Math.round((p.y - drag.oy) / SNAP) * SNAP));
+      t.x = Math.max(0, Math.min(state.data.canvas.w - t.w, Math.round((p.x - drag.ox) / SNAP) * SNAP));
+      t.y = Math.max(0, Math.min(state.data.canvas.h - t.h, Math.round((p.y - drag.oy) / SNAP) * SNAP));
       state.edit.dirty = true;
       renderMap();
       return;
@@ -468,7 +467,7 @@
     if (act === 'add') {
       const seats = +$('ebSeats').value;
       const [w, h] = SEAT_SIZES[seats];
-      const t = { id: newId(), name: nextName(), seats, x: 480 - w / 2, y: 120, w, h };
+      const t = { id: newId(), name: nextName(), seats, x: 480 - w / 2, y: 226, w, h };
       e.tables.push(t);
       e.sel = new Set([t.id]);
       e.dirty = true;

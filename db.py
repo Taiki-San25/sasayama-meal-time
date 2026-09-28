@@ -149,6 +149,7 @@ class FloorLayout(Base):
     date: Mapped[date | None] = mapped_column(Date, nullable=True, unique=True)
     # [{id, name, seats, x, y, w, h, parts?}] parts は連結前の卓(解除用)
     tables: Mapped[list] = mapped_column(JSON, default=list)
+    version: Mapped[int] = mapped_column(Integer, default=1)  # 見取り図の版(floor.LAYOUT_VERSION)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_jst)
     updated_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
 
@@ -180,6 +181,7 @@ ADDED_COLUMNS = [
     ("reservations", "free_child", "INTEGER NOT NULL DEFAULT 0", None),
     ("reservations", "child_coupon", "INTEGER NOT NULL DEFAULT 0", None),
     ("reservations", "outside", "INTEGER NOT NULL DEFAULT 0", None),
+    ("floor_layouts", "version", "INTEGER NOT NULL DEFAULT 1", None),
     ("reservations", "ext_key", "VARCHAR(64)", "CREATE INDEX IF NOT EXISTS ix_reservations_ext_key ON reservations (ext_key)"),
 ]
 # 後から桁数を広げた文字列の列: (テーブル, 列, 桁数)。SQLite は桁数を見ないので PostgreSQL のみ
