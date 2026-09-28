@@ -157,7 +157,7 @@
           <label>区分<select name="meal"><option value="dinner">夕食</option><option value="breakfast">朝食</option></select></label>
           <label>日付<input type="date" name="date" value="${today()}"></label>
         </div>
-        <input type="search" name="q" placeholder="部屋・名前・アレルギー・備考で絞り込み" aria-label="絞り込み">
+        <input type="search" name="q" placeholder="予約番号・部屋・名前・アレルギー・備考で絞り込み" aria-label="絞り込み">
         <div class="pickList"><p class="empty">読み込み中…</p></div>
       </div>`,
       buttons: [{ label: 'キャンセル' }],
@@ -167,17 +167,20 @@
     let rows = [];
     const draw = () => {
       const k = AMT.normSearch(q.value);  // ひらがな・全角カナでも半角カナの名前に当たる
-      const shown = rows.filter(r => !k || [r.room, r.guest_name, r.allergy, r.note].some(v => AMT.normSearch(v).includes(k)));
+      const shown = rows.filter(r => !k || [r.resv_no, r.room, r.guest_name, r.allergy, r.note].some(v => AMT.normSearch(v).includes(k)));
       list.innerHTML = shown.length ? shown.map(r => `<button type="button" class="pickItem" data-id="${r.id}">
           <b title="${esc(r.room)}">${esc(roomText(r.room))}</b><span>${esc(r.guest_name)}</span><span class="muted">${r.time_slot || '時間未定'}</span>
           ${r.allergy ? `<span class="pickAllergy"><i class="ti ti-alert-triangle"></i>${esc(r.allergy)}</span>` : ''}
           ${r.note ? `<span class="pickNote"><i class="ti ti-note"></i>${esc(r.note)}</span>` : ''}</button>`).join('')
         : '<p class="empty">この日の予約はありません</p>';
     };
+    let seq = 0;
     const fetchRows = async () => {
+      const my = ++seq;
       list.innerHTML = '<p class="empty">読み込み中…</p>';
-      rows = (await api(`/api/${meal.value}/reservations?d=${date.value}`).catch(() => []))
-        .sort((a, b) => a.room.localeCompare(b.room, 'ja', { numeric: true }));
+      const got = await api(`/api/${meal.value}/reservations?d=${date.value}`).catch(() => []);
+      if (my !== seq) return;  // 後から切り替えた区分・日付の結果だけを使う
+      rows = got.sort((a, b) => a.room.localeCompare(b.room, 'ja', { numeric: true }));
       draw();
     };
     meal.addEventListener('change', fetchRows);

@@ -204,6 +204,17 @@
   }
 
   function render() {
+    const ed = [...document.querySelectorAll('#ldBody .cntInput')].find(i => !i.dataset.closing);
+    const keep = ed && { id: +ed.closest('tr').dataset.id, key: ed.closest('td').dataset.cnt, value: ed.value };
+    if (ed) ed.dataset.closing = '1';  // 消える入力欄の blur で保存しない
+    renderNow();
+    if (keep) {
+      const td = $('ldBody').querySelector(`tr[data-id="${keep.id}"] td.cnt[data-cnt="${keep.key}"]`);
+      if (td) editCount(td, keep.value);
+    }
+  }
+
+  function renderNow() {
     applyDayTone();
     dateInput.value = state.date;
     $('ldDow').textContent = `(${dow(state.date)})`;
@@ -379,8 +390,8 @@
       box.innerHTML = hist.map(h => {
         // 登録時は入力された項目だけ表示
         const entries = Object.entries(h.changes || {})
-          .filter(([, [, v]]) => h.action !== 'create' || (v !== '' && v !== null && v !== 0));
-        const detail = entries.map(([f, [a, b]]) => `<li><b>${FIELD_LABELS[f] || esc(f)}</b>: ${h.action === 'create'
+          .filter(([, [, v]]) => !['create', 'import'].includes(h.action) || (v !== '' && v !== null && v !== 0));
+        const detail = entries.map(([f, [a, b]]) => `<li><b>${FIELD_LABELS[f] || esc(f)}</b>: ${['create', 'import'].includes(h.action)
           ? esc(fmtVal(f, b))
           : `${esc(fmtVal(f, a))} → ${esc(fmtVal(f, b))}`}</li>`).join('');
         return `<div class="hItem hi-${h.action}">
@@ -456,8 +467,9 @@
 
   // 時間枠の追加・削除(全ロール可。固定の枠は鍵付きで削除不可)
   async function openSlots() {
-    const fixed = await api(`/api/slots/${MEAL}/fixed`);
-    let slots = [...state.slots];
+    const [latest, fixed] = await Promise.all([api(`/api/slots/${MEAL}`), api(`/api/slots/${MEAL}/fixed`)]);
+    state.slots = latest;
+    let slots = [...latest];
     const m = modal({
       title: `${MEAL === 'dinner' ? '夕食' : '朝食'}の時間枠`,
       body: `<div class="slotEdit"><div class="slotChips"></div>
@@ -542,17 +554,20 @@
 
   // ---------- 人数の直接入力 ----------
   // 人数のセルをクリックすると入力欄になる。Enter で保存して次の行の同じ欄へ、Tab で右の欄へ、Esc で取り消し
-  function editCount(td) {
+  function editCount(td, initial) {
     const id = +td.closest('tr').dataset.id, key = td.dataset.cnt;
     const r = state.rows.find(x => x.id === id);
-    td.innerHTML = `<input type="number" class="cntInput" min="0" max="${MAX_COUNT}" step="1" inputmode="numeric" value="${r[key]}" aria-label="人数">`;
+    td.innerHTML = `<input type="number" class="cntInput" min="0" max="${MAX_COUNT}" step="1" inputmode="numeric" value="${esc(initial ?? r[key])}" aria-label="人数">`;
     const input = td.firstChild;
     input.focus();
     input.select();
     let done = false;
     const finish = async move => {
-      if (done) return;
+      if (done || input.dataset.closing) return;
       done = true;
+      input.dataset.closing = '1';
+      // 移動先は保存前の並びで決める(人数で並べ替えていると保存後に行の位置が変わるため)
+      const target = move ? neighborCount(id, key, move) : null;
       const v = input.value.trim();
       const n = Number(v);
       if (v === '' || !Number.isInteger(n) || n < 0 || n > MAX_COUNT) {
@@ -568,31 +583,34 @@
         } catch (err) { /* toast 済み */ }
       }
       render();
-      if (move) moveCount(id, key, move);
+      if (target) {
+        const td = tbody.querySelector(`tr[data-id="${target.id}"] td.cnt[data-cnt="${target.key}"]`);
+        if (td) editCount(td);
+      }
     };
     input.addEventListener('keydown', e => {
       if (e.key === 'Enter') { e.preventDefault(); finish(e.shiftKey ? 'up' : 'down'); }
       else if (e.key === 'Tab') { e.preventDefault(); finish(e.shiftKey ? 'left' : 'right'); }
-      else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done = true; render(); }
+      else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done = true; input.dataset.closing = '1'; render(); }
     });
-    input.addEventListener('blur', () => finish(null));
+    // 他のセルをクリックしたときは、そのクリックが済んでから保存・描き直す
+    input.addEventListener('blur', () => setTimeout(() => finish(null), 0));
   }
-  function moveCount(id, key, dir) {
+  function neighborCount(id, key, dir) {
     const trs = [...tbody.querySelectorAll('tr[data-id]')].filter(tr => tr.querySelector('td.cnt'));
     let i = trs.findIndex(tr => +tr.dataset.id === id), k = COUNT_KEYS.indexOf(key);
     if (dir === 'down') i++;
     else if (dir === 'up') i--;
     else if (dir === 'right') { k++; if (k >= COUNT_KEYS.length) { k = 0; i++; } }
     else if (dir === 'left') { k--; if (k < 0) { k = COUNT_KEYS.length - 1; i--; } }
-    const td = trs[i]?.querySelector(`td.cnt[data-cnt="${COUNT_KEYS[k]}"]`);
-    if (td) editCount(td);
+    return trs[i] ? { id: +trs[i].dataset.id, key: COUNT_KEYS[k] } : null;
   }
 
   // 他端末の更新を反映(編集中・入力中は止める)
   setInterval(() => {
     const el = document.activeElement;
     if (document.hidden || AMT.isModalOpen() || el?.classList.contains('slotSel') || el?.classList.contains('cntInput')) return;
-    loadRows().catch(() => {});
+    loadSlots().then(loadRows).catch(() => {});
   }, REFRESH_MS);
   document.addEventListener('visibilitychange', () => { if (!document.hidden && !AMT.isModalOpen()) loadRows().catch(() => {}); });
   window.addEventListener('amt:imported', () => loadRows().catch(() => {}));

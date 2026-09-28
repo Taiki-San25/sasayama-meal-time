@@ -217,6 +217,14 @@ def put_slots(meal: str, body: SlotsIn, _: User = Depends(current_user), db: Ses
     missing = [s for s in FIXED_SLOTS[meal] if s not in body.slots]
     if missing:
         raise HTTPException(400, f"{'・'.join(missing)} は固定の時間枠のため削除できません")
+    removed = set(slot_labels(db, meal)) - set(body.slots)
+    if removed:
+        used = db.execute(select(Reservation.time_slot, func.count()).where(
+            Reservation.meal == meal, Reservation.time_slot.in_(removed), Reservation.deleted_at.is_(None),
+            Reservation.date >= now_jst().date()).group_by(Reservation.time_slot)).all()
+        if used:
+            detail = "、".join(f"{t}({n}件)" for t, n in sorted(used))
+            raise HTTPException(400, f"今日以降の予約で使われている時間枠は削除できません: {detail}。先に予約の時間を変更してください")
     for ts in db.scalars(select(TimeSlot).where(TimeSlot.meal == meal)):
         db.delete(ts)
     db.add_all(TimeSlot(meal=meal, label=l, sort=i) for i, l in enumerate(body.slots))
@@ -695,7 +703,8 @@ def reset_floor_layout(d: date, user: User = Depends(layout_user), db: Session =
     body = FloorLayoutIn(tables=[FloorTableIn(**t) for t in base_tables(db)])
     result = put_floor_layout(d, body, user, db)
     row = layout_row(db, d)
-    if row:
+    has_assign = db.scalar(select(func.count()).select_from(TableAssignment).where(TableAssignment.date == d))
+    if row and not has_assign:  # 割り当てがなければ基本レイアウトに従う状態に戻す
         db.delete(row)
         db.commit()
     return result
@@ -841,7 +850,9 @@ def import_plan(db: Session, stays: list[importer.Stay]) -> dict:
                     continue  # 何泊目・泊数は滞在全体で数える
                 seen.add((meal, s.key, d))
                 r = existing.get((meal, s.key, d))
-                values = {"room": s.room, "guest_name": s.name}
+                values = {"guest_name": s.name, "nights": len(wanted), "night_no": i + 1}
+                if s.rooms or not r or not r.room or r.room == importer.UNASSIGNED_ROOM:
+                    values["room"] = s.room  # ②に部屋がないときは登録済みの部屋番号を残す
                 if r is None:
                     creates.append((s, meal, d, i + 1, len(wanted)))
                 elif r.deleted_at is not None:
@@ -916,7 +927,9 @@ def import_commit(body: ImportIn, user: User = Depends(import_user), db: Session
     if plan is None:
         raise HTTPException(400, "①予約と②部屋割りの2つのファイルがそろっていないため、取り込みを中止しました")
     now = now_jst()
-    stay_ids = {}
+    # 連泊ID: すでに取り込んだ同じ予約の行があればそのIDを引き継ぐ(延泊で後から増えた日も同じ連泊にする)
+    stay_ids = {(r.ext_key, r.meal): r.stay_id for r in db.scalars(select(Reservation).where(
+        Reservation.ext_key.in_({s.key for s, *_ in plan["creates"]}), Reservation.stay_id.is_not(None)))}
     for s, meal, d, night_no, nights in plan["creates"]:
         stay_id = stay_ids.setdefault((s.key, meal), uuid.uuid4().hex) if nights > 1 else None
         r = Reservation(meal=meal, date=d, nights=nights, night_no=night_no, stay_id=stay_id, ext_key=s.key,
@@ -927,6 +940,8 @@ def import_commit(body: ImportIn, user: User = Depends(import_user), db: Session
         db.flush()
         record(db, r, user, "import", {f: [None, v] for f, v in snapshot(r).items()})
     for r, values in plan["updates"]:
+        if values.get("nights", 1) > 1 and not r.stay_id:
+            values = {**values, "stay_id": stay_ids.setdefault((r.ext_key, r.meal), uuid.uuid4().hex)}
         change(db, r, values, user, action="import_update")
     db.commit()
     return import_response(files, plan)

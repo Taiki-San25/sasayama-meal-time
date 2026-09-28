@@ -111,8 +111,8 @@
     $('flSlots').innerHTML = d.slots.map(s => {
       const rs = d.reservations.filter(r => r.time_slot === s);
       const done = rs.filter(r => d.assignments.some(a => a.time_slot === s && a.reservation_id === r.id)).length;
-      return `<button type="button" role="tab" class="slotTab${s === state.slot ? ' on' : ''}" data-slot="${s}" aria-selected="${s === state.slot}">
-        ${s}<small>${done}/${rs.length}組</small></button>`;
+      return `<button type="button" role="tab" class="slotTab${s === state.slot ? ' on' : ''}" data-slot="${esc(s)}" aria-selected="${s === state.slot}">
+        ${esc(s)}<small>${done}/${rs.length}組</small></button>`;
     }).join('');
     renderList();
     renderMap();
@@ -271,6 +271,7 @@
   let drag = null;  // { kind: 'res'|'table'|'layout', id, sx, sy, moved, ghost, ox, oy }
   function startDrag(e, kind, id) {
     if (e.button !== undefined && e.button !== 0) return;
+    if (drag) cancelDrag();
     drag = { kind, id, sx: e.clientX, sy: e.clientY, moved: false };
     if (kind === 'layout') {
       const t = state.edit.tables.find(x => x.id === id);
@@ -358,7 +359,7 @@
 
   function cancelDrag() {
     window.removeEventListener('pointermove', onDragMove);
-    if (state.edit) state.edit.guides = null;
+    if (state.edit && state.edit.guides) { state.edit.guides = null; renderMap(); }
     if (drag && drag.ghost) drag.ghost.remove();
     document.body.classList.remove('dragging');
     map.querySelectorAll('.tbl.over').forEach(g => g.classList.remove('over'));
@@ -412,6 +413,7 @@
   const newId = () => 't' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
 
   async function enterEdit(target) {
+    if (target === 'day') await load();
     const tables = target === 'base' ? (await api('/api/floor/base')).tables : state.data.tables;
     state.edit = { target, tables: clone(tables), sel: new Set(), dirty: false };
     state.selected = state.moveFrom = null;
@@ -482,6 +484,7 @@
       </form>`;
   }
 
+  $('flList').addEventListener('submit', e => e.preventDefault());
   $('flList').addEventListener('change', e => {
     if (!state.edit || !e.target.closest('#ebForm')) return;
     const t = state.edit.tables.find(x => state.edit.sel.has(x.id));
@@ -498,6 +501,8 @@
       if (!t.parts && SEAT_SIZES[n]) {  // 標準の卓は席数に合わせて大きさも変える
         const [w, h] = SEAT_SIZES[n];
         t.x += Math.round((t.w - w) / 2); t.w = w; t.h = h;
+        t.x = Math.max(0, Math.min(state.data.canvas.w - w, t.x));
+        t.y = Math.max(0, Math.min(state.data.canvas.h - h, t.y));
       }
     }
     state.edit.dirty = true;
@@ -527,8 +532,13 @@
       const parts = sel.flatMap(t => t.parts || [t]).map(p => clone(p));
       const x = Math.min(...sel.map(t => t.x)), y = Math.min(...sel.map(t => t.y));
       const x2 = Math.max(...sel.map(t => t.x + t.w)), y2 = Math.max(...sel.map(t => t.y + t.h));
-      const m = { id: newId(), name: sel.map(t => t.name).join('+').slice(0, 16), seats: sel.reduce((s, t) => s + t.seats, 0),
-        x, y, w: x2 - x, h: y2 - y, parts };
+      const seats = sel.reduce((n, t) => n + t.seats, 0);
+      if (seats > 60) return toast('連結した卓の席数は60名までです', true);
+      let name = sel.map(t => t.name).join('+');
+      if (name.length > 16) name = `${sel[0].name}ほか${sel.length - 1}卓`.slice(0, 16);
+      const others = new Set(e.tables.filter(t => !e.sel.has(t.id)).map(t => t.name));
+      for (let i = 2; others.has(name); i++) name = `${name.slice(0, 13)}(${i})`;
+      const m = { id: newId(), name, seats, x, y, w: x2 - x, h: y2 - y, parts };
       e.tables = e.tables.filter(t => !e.sel.has(t.id)).concat(m);
       e.sel = new Set([m.id]);
       e.dirty = true;
@@ -536,8 +546,14 @@
       const m = sel[0];
       if (dayAssigned([m.id]).length) return toast('割り当てのある卓は解除できません。先に割り当てを外してください', true);
       const taken = new Set(e.tables.filter(t => t !== m).map(t => t.name));
-      const parts = m.parts.map(p => ({ ...clone(p), id: e.tables.some(t => t.id === p.id) ? newId() : p.id }));
-      parts.forEach(p => { if (taken.has(p.name)) p.name = nextName(); taken.add(p.name); });
+      const dx = m.x - Math.min(...m.parts.map(p => p.x)), dy = m.y - Math.min(...m.parts.map(p => p.y));
+      const { w: CW, h: CH } = state.data.canvas;
+      const parts = m.parts.map(p => ({ ...clone(p), id: e.tables.some(t => t.id === p.id) ? newId() : p.id,
+        x: Math.max(0, Math.min(CW - p.w, p.x + dx)), y: Math.max(0, Math.min(CH - p.h, p.y + dy)) }));
+      parts.forEach(p => {
+        if (taken.has(p.name)) { let n = parseInt(nextName(), 10); while (taken.has(String(n))) n++; p.name = String(n); }
+        taken.add(p.name);
+      });
       e.tables = e.tables.filter(t => t !== m).concat(parts);
       e.sel = new Set(parts.map(p => p.id));
       e.dirty = true;

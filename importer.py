@@ -19,7 +19,7 @@ class CsvError(ValueError):
 
 
 def read_rows(raw: bytes) -> list[list[str]]:
-    for enc in ("cp932", "utf-8-sig"):
+    for enc in ("utf-8-sig", "cp932"):  # UTF-8 を先に(Shift_JIS は UTF-8 として読めないので誤判定しない)
         try:
             text = raw.decode(enc)
             break

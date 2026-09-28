@@ -319,7 +319,7 @@ window.AMT = (function () {
         const lastOf = {};
         d.files.forEach((f, i) => { if (f.kind) lastOf[f.kind] = i; });
         const keep = d.files.map((f, i) => !f.kind || lastOf[f.kind] === i);
-        files = files.filter((_, i) => keep[i]);
+        files = files.filter((_, i) => keep[i] ?? true);
         renderFiles(d.files.filter((_, i) => keep[i]));
         renderResult(d);
         runBtn.disabled = !d.ready;
@@ -330,6 +330,7 @@ window.AMT = (function () {
     async function add(fileList) {
       const picked = [...fileList].filter(f => /\.csv$/i.test(f.name));
       if (!picked.length) { AMT.toast('CSVファイルを選んでください', true); return; }
+      seq++;  // 読み込み中に返ってきた前の確認結果は使わない
       for (const f of picked) files.push({ name: f.name, data: await readB64(f) });
       files = files.slice(-10);
       check();
