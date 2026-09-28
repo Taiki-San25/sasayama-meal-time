@@ -441,6 +441,22 @@ def set_time(meal: str, rid: int, body: TimeSlotIn, user: User = Depends(current
     return to_dict(r, user_names(db))
 
 
+class CountsIn(BaseModel):
+    adults: int = Field(ge=0, le=99)
+    children: int = Field(ge=0, le=99)
+    infants: int = Field(ge=0, le=99)
+
+
+@app.patch("/api/{meal}/reservations/{rid}/counts")
+def set_counts(meal: str, rid: int, body: CountsIn, user: User = Depends(current_user),
+               db: Session = Depends(get_db)):
+    """人数(大人・幼児・席のみ)だけを更新する。管理表の一覧から直接入力するとき用"""
+    r = get_reservation(db, check_meal(meal), rid)
+    change(db, r, body.model_dump(), user)
+    db.commit()
+    return to_dict(r, user_names(db))
+
+
 class EnteredIn(BaseModel):
     entered: bool
 

@@ -161,3 +161,8 @@ body.dayFuture{background:rgba(227,238,250,.5)}
 .slotChip.fixed i{font-size:13px;margin-left:4px;opacity:.7}
 .slotAdd{display:flex;gap:6px}
 .slotAdd input{width:130px;flex:none}
+/* 人数の直接入力 */
+.ledgerTable td.cnt{cursor:text}
+.ledgerTable td.cnt:hover{box-shadow:inset 0 -2px 0 #85b7eb}
+.ledgerTable td.cnt .cntInput{width:56px;height:28px;padding:0 4px;text-align:right;font:inherit}
+@media print{.ledgerTable td.cnt:hover{box-shadow:none}}

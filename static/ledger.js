@@ -105,6 +105,7 @@
 
   // ---------- 描画 ----------
   const total = r => r.adults + r.children;  // 席のみは計に含めない
+  const COUNT_KEYS = ['adults', 'children', 'infants'];  // 一覧から直接入力できる人数(大人・幼児・席のみ)
   const active = () => state.rows.filter(r => !r.deleted);
   // "2026-09-24T18:05:12" → "9/24 18:05"(今年以外は年も表示)
   const fmtTs = ts => {
@@ -234,7 +235,8 @@
         ${MEAL === 'dinner' ? `<td class="tblNo">${(r.tables || []).length ? `<a href="/tables?d=${r.date}&t=${encodeURIComponent(r.time_slot || '')}">${esc(r.tables.join('・'))}</a>` : ''}</td>` : ''}
         <td class="guest">${esc(r.guest_name)}</td>
         <td class="nights">${r.night_no >= 2 ? `<span class="stayBadge" title="連泊の${r.night_no}泊目">${nightsLabel(r)}</span>` : nightsLabel(r)}</td>
-        <td class="num">${r.adults}</td><td class="num">${r.children}</td><td class="num">${r.infants}</td>
+        ${COUNT_KEYS.map(k => r.deleted ? `<td class="num">${r[k]}</td>`
+          : `<td class="num cnt" data-cnt="${k}" title="クリックして人数を入力">${r[k]}</td>`).join('')}
         <td class="num"><b>${total(r)}</b></td>
         <td class="allergyCell">${r.allergy ? `<span class="allergy"><i class="ti ti-alert-triangle"></i>${esc(r.allergy)}</span>` : ''}</td>
         <td class="note">${esc(r.note)}</td>
@@ -531,14 +533,65 @@
     render();
   });
   tbody.addEventListener('click', e => {
-    if (e.target.closest('select, .entChk')) return;
+    if (e.target.closest('select, .entChk, .cntInput')) return;
+    const cell = e.target.closest('td.cnt');
+    if (cell) return editCount(cell);
     const tr = e.target.closest('tr[data-id]');
     if (tr) openForm(state.rows.find(r => r.id === +tr.dataset.id));
   });
 
+  // ---------- 人数の直接入力 ----------
+  // 人数のセルをクリックすると入力欄になる。Enter で保存して次の行の同じ欄へ、Tab で右の欄へ、Esc で取り消し
+  function editCount(td) {
+    const id = +td.closest('tr').dataset.id, key = td.dataset.cnt;
+    const r = state.rows.find(x => x.id === id);
+    td.innerHTML = `<input type="number" class="cntInput" min="0" max="${MAX_COUNT}" step="1" inputmode="numeric" value="${r[key]}" aria-label="人数">`;
+    const input = td.firstChild;
+    input.focus();
+    input.select();
+    let done = false;
+    const finish = async move => {
+      if (done) return;
+      done = true;
+      const v = input.value.trim();
+      const n = Number(v);
+      if (v === '' || !Number.isInteger(n) || n < 0 || n > MAX_COUNT) {
+        toast(`人数は0〜${MAX_COUNT}の整数で入力してください`, true);
+        render();
+        return;
+      }
+      if (n !== r[key]) {
+        try {
+          const body = Object.fromEntries(COUNT_KEYS.map(k => [k, k === key ? n : r[k]]));
+          const updated = await api(`/api/${MEAL}/reservations/${id}/counts`, { method: 'PATCH', body });
+          state.rows = state.rows.map(x => x.id === id ? updated : x);
+        } catch (err) { /* toast 済み */ }
+      }
+      render();
+      if (move) moveCount(id, key, move);
+    };
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); finish(e.shiftKey ? 'up' : 'down'); }
+      else if (e.key === 'Tab') { e.preventDefault(); finish(e.shiftKey ? 'left' : 'right'); }
+      else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done = true; render(); }
+    });
+    input.addEventListener('blur', () => finish(null));
+  }
+  function moveCount(id, key, dir) {
+    const trs = [...tbody.querySelectorAll('tr[data-id]')].filter(tr => tr.querySelector('td.cnt'));
+    let i = trs.findIndex(tr => +tr.dataset.id === id), k = COUNT_KEYS.indexOf(key);
+    if (dir === 'down') i++;
+    else if (dir === 'up') i--;
+    else if (dir === 'right') { k++; if (k >= COUNT_KEYS.length) { k = 0; i++; } }
+    else if (dir === 'left') { k--; if (k < 0) { k = COUNT_KEYS.length - 1; i--; } }
+    const td = trs[i]?.querySelector(`td.cnt[data-cnt="${COUNT_KEYS[k]}"]`);
+    if (td) editCount(td);
+  }
+
   // 他端末の更新を反映(編集中・入力中は止める)
   setInterval(() => {
-    if (document.hidden || AMT.isModalOpen() || document.activeElement?.classList.contains('slotSel')) return;
+    const el = document.activeElement;
+    if (document.hidden || AMT.isModalOpen() || el?.classList.contains('slotSel') || el?.classList.contains('cntInput')) return;
     loadRows().catch(() => {});
   }, REFRESH_MS);
   document.addEventListener('visibilitychange', () => { if (!document.hidden && !AMT.isModalOpen()) loadRows().catch(() => {}); });
