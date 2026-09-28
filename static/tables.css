@@ -80,11 +80,7 @@ body.dragging,body.dragging *{cursor:grabbing !important}
 .tblInfo p{margin:0 0 4px}
 .tblInfo .allergy{color:#c0392b}
 .tblInfo .overTxt{color:#c0392b;font-weight:700;display:flex;gap:4px;align-items:center}
-.tiRow{display:flex;gap:10px;align-items:flex-start;justify-content:space-between;padding:8px 0;border-top:1px solid #eee}
 .tiRow:first-of-type{border-top:none}
-.tiBtns{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;flex-shrink:0}
-.tiBtns .btn{height:30px;padding:0 10px;font-size:12px}
-@media (max-width:640px){.tiRow{flex-direction:column}}
 .printTitle{display:none}
 @media (max-width:900px){
   .flBody{grid-template-columns:1fr}
@@ -105,7 +101,20 @@ body.dragging,body.dragging *{cursor:grabbing !important}
 .tbl.full.noCount .tPeople{fill:#c0392b}
 /* 卓メモ */
 .tbl .tMemo{font-size:11px;font-weight:700;fill:#a55a00;text-anchor:middle}
-.tiMemo{display:grid;gap:4px;margin-top:6px;font-size:12px;color:#555}
-.tiMemo textarea{width:100%;min-height:44px;resize:vertical;font:inherit;font-size:13px;box-sizing:border-box}
-.tiMain > .btn{margin-top:4px;height:28px;padding:0 10px;font-size:12px}
-.tiRow .tiMain{flex:1;min-width:0}
+/* 卓のモーダル: 予約ごとに「名前+操作」「人数・卓」「アレルギー・備考」「卓メモ」の順 */
+.tiRow{padding:12px 0;border-top:1px solid #eee}
+.tiRow:first-of-type{border-top:none;padding-top:4px}
+.tiHead{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.tiWho{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;font-size:15px}
+.tiWho b{font-size:16px}
+.tiBtns{display:flex;gap:6px;flex-wrap:wrap}
+.tiBtns .btn{height:30px;padding:0 10px;font-size:12px}
+.tiFacts{display:flex;flex-wrap:wrap;gap:4px 16px;margin:6px 0 4px;font-size:13px;color:#555}
+.tiNote{color:#555;font-size:13px}
+.tblInfo .allergy{display:flex;gap:4px;align-items:flex-start}
+.tiMemo{margin-top:8px;padding:8px 10px;background:#fbfaf6;border:1px solid #eee4cc;border-radius:8px}
+.tiMemo label{display:flex;align-items:baseline;gap:8px;font-size:12px;font-weight:700;color:#7a5a12;margin-bottom:4px}
+.tiMemo label small{font-weight:400;color:#999}
+.tiMemo textarea{width:100%;min-height:52px;resize:vertical;font:inherit;font-size:13px;box-sizing:border-box}
+.tiMemoFoot{display:flex;justify-content:flex-end;margin-top:6px}
+.tiMemoFoot .btn{height:30px;padding:0 12px;font-size:12px}

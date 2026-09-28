@@ -237,21 +237,26 @@
     const o = tableLoads()[tableId];
     const m = modal({
       title: `卓 ${t.name}(${t.seats}名)`,
-      wide: rs.length > 1,
+      wide: true,
       body: `<div class="tblInfo">
         ${people(o) > t.seats ? `<p class="overTxt"><i class="ti ti-alert-triangle"></i>人数(${people(o)}名)が席数(${t.seats}名)を超えています</p>` : ''}
         ${rs.map(r => `<div class="tiRow">
-          <div class="tiMain"><p><b>${esc(roomText(r.room))}</b> ${esc(r.guest_name)}${r.guest_name ? ' 様' : ''}
-            ${r.entered_at ? '<span class="rcEntered">入場済</span>' : ''}</p>
-          <p class="muted">大人${r.adults} 幼児${r.children} 席のみ${r.infants}　卓: ${tablesOfRes(r.id).map(esc).join('・')}</p>
+          <div class="tiHead">
+            <div class="tiWho"><b>${esc(roomText(r.room))}</b><span>${esc(r.guest_name)}${r.guest_name ? ' 様' : ''}</span>
+              ${r.entered_at ? '<span class="rcEntered">入場済</span>' : ''}</div>
+            <div class="tiBtns">
+              <button type="button" class="btn" data-ti="move" data-rid="${r.id}"><i class="ti ti-arrows-move"></i>別の卓へ移動</button>
+              <button type="button" class="btn" data-ti="add" data-rid="${r.id}"><i class="ti ti-plus"></i>卓を追加</button>
+              <button type="button" class="btn danger" data-ti="remove" data-rid="${r.id}"><i class="ti ti-x"></i>外す</button>
+            </div>
+          </div>
+          <div class="tiFacts"><span>大人${r.adults}・幼児${r.children}・席のみ${r.infants}</span><span>卓: ${tablesOfRes(r.id).map(esc).join('・')}</span></div>
           ${r.allergy ? `<p class="allergy"><i class="ti ti-alert-triangle"></i>${esc(r.allergy)}</p>` : ''}
-          ${r.note ? `<p class="muted">備考: ${esc(r.note)}</p>` : ''}
-          <label class="tiMemo">卓メモ(このページでのみ表示)<textarea data-memo="${r.id}" maxlength="500" rows="2" placeholder="例: 窓側希望、記念日のケーキ">${esc(memoOf(tableId, r.id))}</textarea></label>
-          <button type="button" class="btn" data-ti="memo" data-rid="${r.id}"><i class="ti ti-device-floppy"></i>メモを保存</button></div>
-          <div class="tiBtns">
-            <button type="button" class="btn" data-ti="move" data-rid="${r.id}">別の卓へ移動</button>
-            <button type="button" class="btn" data-ti="add" data-rid="${r.id}">卓を追加</button>
-            <button type="button" class="btn danger" data-ti="remove" data-rid="${r.id}">外す</button>
+          ${r.note ? `<p class="tiNote">備考: ${esc(r.note)}</p>` : ''}
+          <div class="tiMemo">
+            <label for="memo${r.id}">卓メモ<small>このページでのみ表示されます</small></label>
+            <textarea id="memo${r.id}" data-memo="${r.id}" maxlength="500" rows="2" placeholder="例: 窓側希望、記念日のケーキ">${esc(memoOf(tableId, r.id))}</textarea>
+            <div class="tiMemoFoot"><button type="button" class="btn" data-ti="memo" data-rid="${r.id}"><i class="ti ti-device-floppy"></i>メモを保存</button></div>
           </div></div>`).join('')}</div>`,
       buttons: [{ label: '閉じる' }].concat(rs.length > 1
         ? [{ label: 'この卓の全員を移動', primary: true, onClick: () => { state.moveFrom = { table: tableId }; state.selected = null; render(); } }] : []),
