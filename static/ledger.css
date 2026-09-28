@@ -146,3 +146,7 @@ body.dayFuture{background:rgba(227,238,250,.5)}
 }
 .multiRoom{cursor:help;white-space:nowrap}
 .multiRoom small{font-weight:400;color:#777;font-size:11px}
+/* 2泊目以降の泊数バッジ */
+.stayBadge{display:inline-block;padding:1px 8px;border-radius:6px;background:#faeeda;color:#633806;border:1px solid #ef9f27;font-weight:700}
+.ledgerTable tbody tr.deleted .stayBadge{background:#e6e6e6;color:#999;border-color:#ccc}
+@media print{.stayBadge{-webkit-print-color-adjust:exact;print-color-adjust:exact}}

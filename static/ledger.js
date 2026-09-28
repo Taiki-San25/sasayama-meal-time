@@ -229,7 +229,7 @@
         <td class="resvNo">${esc(r.resv_no || '')}</td>
         <td class="room">${roomLabel(r.room)}${groupTag(groups[r.group_id])}</td>
         <td class="guest">${esc(r.guest_name)}</td>
-        <td class="nights">${nightsLabel(r)}</td>
+        <td class="nights">${r.night_no >= 2 ? `<span class="stayBadge" title="連泊の${r.night_no}泊目">${nightsLabel(r)}</span>` : nightsLabel(r)}</td>
         <td class="num">${r.adults}</td><td class="num">${r.children}</td><td class="num">${r.infants}</td>
         <td class="num"><b>${total(r)}</b></td>
         <td class="allergyCell">${r.allergy ? `<span class="allergy"><i class="ti ti-alert-triangle"></i>${esc(r.allergy)}</span>` : ''}</td>
