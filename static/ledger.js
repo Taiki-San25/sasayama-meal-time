@@ -127,6 +127,14 @@
       ? `<span class="multiRoom" title="${esc(rooms.join(', '))}">${esc(rooms[0])} <small>他${rooms.length - 1}室</small></span>`
       : esc(room);
   };
+  // テーブル列: 2卓までは全部、3卓以上は「1 他9卓」(部屋の列と同じ形)。ホバーで全卓、クリックでテーブルアサインへ
+  const TABLES_SHOWN = 2;
+  const tableLabel = r => {
+    const ts = r.tables || [];
+    if (!ts.length) return '';
+    const text = ts.length > TABLES_SHOWN ? `${esc(ts[0])} <small>他${ts.length - 1}卓</small>` : esc(ts.join('・'));
+    return `<a href="/tables?d=${r.date}&t=${encodeURIComponent(r.time_slot || '')}" title="テーブル: ${esc(ts.join('・'))}">${text}</a>`;
+  };
   const fmtVal = (f, v) => f === 'time_slot' ? (v || '未定')
     : f === 'group_id' ? (v ? 'あり' : 'なし')
     : f === 'entered_at' ? (v ? `入場済(${fmtTs(v)})` : '空白')
@@ -243,7 +251,7 @@
         <td class="status">${statusCell(r)}</td>
         <td class="resvNo">${esc(r.resv_no || '')}</td>
         <td class="room">${roomLabel(r.room)}${groupTag(groups[r.group_id])}</td>
-        ${MEAL === 'dinner' ? `<td class="tblNo">${(r.tables || []).length ? `<a href="/tables?d=${r.date}&t=${encodeURIComponent(r.time_slot || '')}">${esc(r.tables.join('・'))}</a>` : ''}</td>` : ''}
+        ${MEAL === 'dinner' ? `<td class="tblNo">${tableLabel(r)}</td>` : ''}
         <td class="guest">${esc(r.guest_name)}</td>
         <td class="nights">${r.night_no >= 2 ? `<span class="stayBadge" title="連泊の${r.night_no}泊目">${nightsLabel(r)}</span>` : nightsLabel(r)}</td>
         ${COUNT_KEYS.map(k => r.deleted ? `<td class="num">${r[k]}</td>`

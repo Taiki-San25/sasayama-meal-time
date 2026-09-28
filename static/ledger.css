@@ -54,6 +54,7 @@ body.dayFuture{background:rgba(227,238,250,.5)}
 .ledgerTable td.resvNo{white-space:nowrap;color:#555;font-variant-numeric:tabular-nums}
 .ledgerTable td.tblNo{white-space:nowrap;font-weight:700}
 .ledgerTable td.tblNo a{color:#185fa5;text-decoration:none}
+.ledgerTable td.tblNo small{font-weight:400;color:#777;font-size:11px}
 .ledgerTable td{white-space:nowrap}
 .ledgerTable td.empty{white-space:normal}
 .ledgerTable td.note,.ledgerTable td.allergyCell{white-space:pre-wrap;min-width:160px}
