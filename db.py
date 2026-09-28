@@ -35,6 +35,8 @@ DEFAULT_SLOTS = {
     "dinner": ["17:30", "18:00", "18:30", "19:00", "19:30", "20:00"],
     "breakfast": ["07:00", "07:30", "08:00", "08:30", "09:00"],
 }
+# どのロールからも削除できない時間枠(CSV取込の⑰=17:30・⑲=19:30 で使う)
+FIXED_SLOTS = {"dinner": ["17:30", "19:30"], "breakfast": []}
 
 
 JST = timezone(timedelta(hours=9))
@@ -210,4 +212,13 @@ def init_db() -> None:
         for meal in MEALS:
             if s.scalar(select(func.count()).select_from(TimeSlot).where(TimeSlot.meal == meal)) == 0:
                 s.add_all(TimeSlot(meal=meal, label=l, sort=i) for i, l in enumerate(DEFAULT_SLOTS[meal]))
+                continue
+            # 固定の時間枠が消えていれば戻す
+            rows = list(s.scalars(select(TimeSlot).where(TimeSlot.meal == meal)))
+            missing = [l for l in FIXED_SLOTS[meal] if l not in {r.label for r in rows}]
+            if missing:
+                s.add_all(TimeSlot(meal=meal, label=l) for l in missing)
+                s.flush()
+                for i, r in enumerate(sorted(s.scalars(select(TimeSlot).where(TimeSlot.meal == meal)), key=lambda r: r.label)):
+                    r.sort = i
         s.commit()

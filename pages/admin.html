@@ -24,6 +24,8 @@
   .chip{display:inline-flex;align-items:center;gap:2px;padding:0 4px 0 10px;height:28px;border-radius:999px;
     background:var(--accent-bg);color:var(--accent);font-size:13px;font-variant-numeric:tabular-nums}
   .chip button{border:none;background:transparent;color:inherit;cursor:pointer;padding:0 4px;display:flex}
+  .chip.fixed{padding-right:10px}
+  .chip.fixed i{font-size:13px;margin-left:4px;opacity:.7}
   .slotAdd{display:flex;gap:6px}
   .slotAdd input{width:120px;flex:none}
   .slotAdd .btn.primary{margin-left:auto}
@@ -121,6 +123,7 @@
   document.querySelectorAll('.slotBox').forEach(box => {
     const meal = box.dataset.meal;
     let slots = [];
+    let fixed = [];  // 削除できない時間枠(サーバーで決めている)
     box.insertAdjacentHTML('beforeend', `
       <div class="chips"></div>
       <div class="slotAdd">
@@ -132,7 +135,9 @@
     const input = box.querySelector('input');
     const draw = () => {
       chips.innerHTML = slots.length
-        ? slots.map(s => `<span class="chip">${s}<button data-del="${s}" aria-label="${s} を削除"><i class="ti ti-x"></i></button></span>`).join('')
+        ? slots.map(s => fixed.includes(s)
+            ? `<span class="chip fixed" title="固定の時間枠のため削除できません">${s}<i class="ti ti-lock" aria-label="削除不可"></i></span>`
+            : `<span class="chip">${s}<button data-del="${s}" aria-label="${s} を削除"><i class="ti ti-x"></i></button></span>`).join('')
         : '<span class="muted" style="font-size:13px">時間枠がありません</span>';
     };
     const add = () => {
@@ -146,14 +151,15 @@
     input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
     chips.addEventListener('click', e => {
       const s = e.target.closest('[data-del]')?.dataset.del;
-      if (s) { slots = slots.filter(x => x !== s); draw(); }
+      if (s && !fixed.includes(s)) { slots = slots.filter(x => x !== s); draw(); }
     });
     box.querySelector('[data-save]').addEventListener('click', async () => {
       slots = await api(`/api/slots/${meal}`, { method: 'PUT', body: { slots } });
       draw();
       toast(`${meal === 'dinner' ? '夕食' : '朝食'}の時間枠を保存しました`);
     });
-    api(`/api/slots/${meal}`).then(s => { slots = s; draw(); }).catch(() => {});
+    Promise.all([api(`/api/slots/${meal}`), api(`/api/slots/${meal}/fixed`)])
+      .then(([s, f]) => { slots = s; fixed = f; draw(); }).catch(() => {});
   });
 
   AMT.me.then(me => { meId = me.id; meRole = me.role; return loadUsers(); }).catch(() => {});

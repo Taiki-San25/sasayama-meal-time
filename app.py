@@ -21,7 +21,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 import floor
 import importer
-from db import (ADMIN_ROLES, ENTRY_ROLES, IMPORT_ROLES, LAYOUT_ROLES, MEALS, FloorLayout, TableAssignment, ROLES, AuthLog, ChatMessage, ChatRead, Reservation, ReservationHistory, SessionLocal, TimeSlot,
+from db import (ADMIN_ROLES, ENTRY_ROLES, FIXED_SLOTS, IMPORT_ROLES, LAYOUT_ROLES, MEALS, FloorLayout, TableAssignment, ROLES, AuthLog, ChatMessage, ChatRead, Reservation, ReservationHistory, SessionLocal, TimeSlot,
                 User, init_db, now_jst)
 from security import hash_password, verify_password
 
@@ -187,6 +187,11 @@ def check_meal(meal: str) -> str:
     return meal
 
 
+@app.get("/api/slots/{meal}/fixed")
+def get_fixed_slots(meal: str, _: User = Depends(current_user)):
+    return FIXED_SLOTS[check_meal(meal)]
+
+
 @app.get("/api/slots/{meal}")
 def get_slots(meal: str, _: User = Depends(current_user), db: Session = Depends(get_db)):
     return slot_labels(db, check_meal(meal))
@@ -208,6 +213,9 @@ class SlotsIn(BaseModel):
 @app.put("/api/slots/{meal}")
 def put_slots(meal: str, body: SlotsIn, _: User = Depends(admin_user), db: Session = Depends(get_db)):
     check_meal(meal)
+    missing = [s for s in FIXED_SLOTS[meal] if s not in body.slots]
+    if missing:
+        raise HTTPException(400, f"{'・'.join(missing)} は固定の時間枠のため削除できません")
     for ts in db.scalars(select(TimeSlot).where(TimeSlot.meal == meal)):
         db.delete(ts)
     db.add_all(TimeSlot(meal=meal, label=l, sort=i) for i, l in enumerate(body.slots))
