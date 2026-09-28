@@ -124,6 +124,8 @@ class Reservation(Base):
     deleted_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     entered_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # ステータス: None=空白, あり=入場済
     entered_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    # 朝食の入場人数(大人+幼児のうち何人来たか)。None=数えていない。全員で entered_at が入る
+    entered_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     ext_key: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)  # CSV取込元の予約番号-枝番
 
 
@@ -179,6 +181,7 @@ ADDED_COLUMNS = [
     ("reservations", "entered_by", "INTEGER", None),
     ("floor_layouts", "version", "INTEGER NOT NULL DEFAULT 1", None),
     ("table_assignments", "memo", "TEXT NOT NULL DEFAULT ''", None),
+    ("reservations", "entered_count", "INTEGER", None),
     ("table_assignments", "adults", "INTEGER", None),
     ("table_assignments", "children", "INTEGER", None),
     ("table_assignments", "infants", "INTEGER", None),

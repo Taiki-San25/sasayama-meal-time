@@ -18,7 +18,7 @@
   const byText = f => r => r[f] || '';
   const COLUMNS = [
     { key: 'time', label: '時間', val: r => r.time_slot || '' },
-    { key: 'status', label: 'ステータス', val: r => (r.entered_at ? 1 : 0) },
+    { key: 'status', label: 'ステータス', val: r => (r.entered_at ? 2 : r.entered_count ? 1 : 0) },
     { key: 'resv_no', label: '予約番号', val: byText('resv_no') },
     { key: 'room', label: '部屋', val: byText('room') },
     ...(MEAL === 'dinner' ? [{ key: 'tables', label: 'テーブル', val: r => (r.tables || []).join('・') }] : []),
@@ -117,7 +117,7 @@
     return `${y === String(new Date().getFullYear()) ? '' : y + '/'}${+mo}/${+da} ${t.slice(0, 5)}`;
   };
   const FIELD_LABELS = { date: '日付', time_slot: '時間', room: '部屋', guest_name: '代表者名', adults: '大人',
-    children: '幼児', infants: '席のみ', tables: 'テーブル', nights: '泊数', night_no: '何泊目', group_id: 'グループ', entered_at: 'ステータス', allergy: 'アレルギー', note: '備考' };
+    children: '幼児', infants: '席のみ', tables: 'テーブル', entered_count: '入場人数', nights: '泊数', night_no: '何泊目', group_id: 'グループ', entered_at: 'ステータス', allergy: 'アレルギー', note: '備考' };
   const nightsLabel = r => `${r.night_no}泊/${r.nights}泊`;
   const ACTION_LABELS = { create: '登録', update: '変更', delete: '削除', restore: '復元', import: 'CSV取込', import_update: 'CSV取込(更新)', table_memo: '卓メモを変更', table_counts: '卓の人数を変更' };
   // 複数部屋(「, 」区切り)は「115 他14室」と表示し、ホバーで全室
@@ -196,17 +196,19 @@
   function renderSummary() {
     const agg = {};
     const add = (k, r) => {
-      const a = agg[k] || (agg[k] = { n: 0, adults: 0, children: 0, infants: 0, entered: 0 });
+      const a = agg[k] || (agg[k] = { n: 0, adults: 0, children: 0, infants: 0, entered: 0, partial: 0 });
       a.n++; a.adults += r.adults; a.children += r.children; a.infants += r.infants;
       if (r.entered_at) a.entered++;
+      else if (MEAL === 'breakfast' && entryCount(r)) a.partial++;
     };
     active().forEach(r => { add(r.time_slot || UNSET, r); add('*', r); });
     const keys = [...new Set([...state.slots, ...Object.keys(agg).filter(k => k !== '*' && k !== UNSET)])].sort();
     if (agg[UNSET]) keys.push(UNSET);
     const card = (label, a, cls = '', slot = '*') => {
-      a = a || { n: 0, adults: 0, children: 0, infants: 0, entered: 0 };
+      a = a || { n: 0, adults: 0, children: 0, infants: 0, entered: 0, partial: 0 };
       const t = total(a);
       const pct = a.n ? Math.round(a.entered / a.n * 100) : 0;
+      const pctPart = a.n ? Math.round(a.partial / a.n * 100) : 0;
       const allIn = a.n > 0 && a.entered === a.n;  // 入場済みが100%
       const on = slot === '*' ? state.slotFilter === null : state.slotFilter === slot;
       const tip = slot === '*' ? 'クリックで全部の時間を表示' : `クリックで ${label} の予約だけを表示`;
@@ -214,8 +216,8 @@
         <div class="sumLabel">${esc(label)}${allIn ? '<span class="allInMark"> ✓全員入場</span>' : ''}</div>
         <div class="sumMain"><b>${t}</b>名 <span>${a.n}組</span></div>
         <div class="sumSub">大${a.adults} 幼${a.children} 席${a.infants}</div>
-        <div class="entBar" role="progressbar" aria-label="入場" aria-valuemin="0" aria-valuemax="${a.n}" aria-valuenow="${a.entered}"><i style="width:${pct}%"></i></div>
-        <div class="entTxt">入場 ${a.entered}/${a.n}組</div></div>`;
+        <div class="entBar" role="progressbar" aria-label="入場" aria-valuemin="0" aria-valuemax="${a.n}" aria-valuenow="${a.entered}"><i style="width:${pct}%"></i><i class="part" style="width:${pctPart}%"></i></div>
+        <div class="entTxt">入場 ${a.entered}/${a.n}組${a.partial ? `<span class="entPartTxt">(一部${a.partial}組)</span>` : ''}</div></div>`;
     };
     $('ldSummary').innerHTML =
       keys.map(k => card(k || '未定', agg[k], k ? '' : 'unset', k)).join('') + card('合計', agg['*'], 'total');
@@ -283,12 +285,30 @@
   }
 
   // ステータス: レストランは(削除済み以外)チェックボックス、他ロールは表示のみ
+  // 朝食: 入場を数える人数(大人+幼児。席のみは除く)と、入場した人数
+  const entryTotal = r => r.adults + r.children;
+  const entryCount = r => r.entered_count ?? (r.entered_at ? (entryTotal(r) || 1) : 0);
   function statusCell(r) {
+    if (MEAL === 'breakfast') return breakfastStatus(r);
     const title = r.entered_at ? ` title="${fmtTs(r.entered_at)} ${esc(r.entered_by)}"` : '';
     if (ENTRY_ROLES.includes(state.role) && !r.deleted) {
       return `<label class="entChk"${title}><input type="checkbox" class="entSel" ${r.entered_at ? 'checked' : ''}>入場済</label>`;
     }
     return r.entered_at ? `<span class="entBadge"${title}><i class="ti ti-check"></i>入場済</span>` : '';
+  }
+
+  // 朝食のステータス: 入場した人数を＋−で数える。0=空白、途中=一部入場、全員=入場済
+  function breakfastStatus(r) {
+    const total = entryTotal(r), n = entryCount(r), max = total || 1;
+    const title = r.entered_at ? ` title="${fmtTs(r.entered_at)} ${esc(r.entered_by)}"` : '';
+    const badge = r.entered_at ? `<span class="entBadge"${title}><i class="ti ti-check"></i>入場済</span>`
+      : n ? `<span class="entPartial">一部入場 ${n}/${total}名</span>` : '';
+    if (!ENTRY_ROLES.includes(state.role) || r.deleted) return badge;
+    return `<span class="entStep${r.entered_at ? ' full' : n ? ' part' : ''}"${title}>
+      <button type="button" data-ent="-1" aria-label="入場を1人減らす" ${n ? '' : 'disabled'}>−</button>
+      <b>${total ? `${n}/${total}` : (n ? '済' : '未')}</b>
+      <button type="button" data-ent="1" aria-label="入場を1人増やす" ${n >= max ? 'disabled' : ''}>＋</button></span>
+      ${r.entered_at ? '<span class="entTag full">入場済</span>' : n ? '<span class="entTag part">一部入場</span>' : ''}`;
   }
 
   // ---------- 編集 ----------
@@ -595,8 +615,20 @@
     } catch (err) { /* toast 済み */ }
     render();
   });
-  tbody.addEventListener('click', e => {
-    if (e.target.closest('select, .entChk, .cntInput')) return;
+  tbody.addEventListener('click', async e => {
+    const step = e.target.closest('[data-ent]');
+    if (step) {
+      const r = state.rows.find(x => x.id === +step.closest('tr').dataset.id);
+      const count = entryCount(r) + +step.dataset.ent;
+      step.disabled = true;
+      try {
+        const updated = await api(`/api/breakfast/reservations/${r.id}/entered_count`, { method: 'PATCH', body: { count } });
+        state.rows = state.rows.map(x => x.id === r.id ? updated : x);
+      } catch (err) { /* toast 済み */ }
+      render();
+      return;
+    }
+    if (e.target.closest('select, .entChk, .cntInput, .entStep')) return;
     const cell = e.target.closest('td.cnt');
     if (cell) return editCount(cell);
     const tr = e.target.closest('tr[data-id]');

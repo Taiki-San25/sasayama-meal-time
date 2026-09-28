@@ -179,8 +179,9 @@ body.slotFiltered .summary .sumCard:not(.on):not(.total){opacity:.45}
 .filterNote .btn{height:28px;padding:0 10px;font-size:12px;margin-left:auto}
 @media print{body.slotFiltered .summary .sumCard:not(.on){display:none}}
 /* 時間枠カードの入場バー(入場済みの組数/組数)。全員入場で背景を緑 */
-.sumCard .entBar{height:5px;background:#eceff1;border-radius:3px;margin-top:6px;overflow:hidden}
-.sumCard .entBar i{display:block;height:100%;background:#43a047;border-radius:3px;transition:width .3s}
+.sumCard .entBar{display:flex;height:5px;background:#eceff1;border-radius:3px;margin-top:6px;overflow:hidden}
+.sumCard .entBar i{display:block;height:100%;background:#43a047;transition:width .3s}
+.sumCard .entBar i.part{background:#ef9f27}
 .sumCard .entTxt{font-size:11px;color:#2e7d32;margin-top:2px}
 .sumCard.zero .entTxt{color:#999}
 .sumCard.allIn,.sumCard.total.allIn,.sumCard.unset.allIn{background:#dff0df;border-color:#2e7d32}
@@ -188,3 +189,17 @@ body.slotFiltered .summary .sumCard:not(.on):not(.total){opacity:.45}
 .sumCard .allInMark{font-size:11px;font-weight:700;color:#1b5e20}
 @media print{.sumCard .entBar i,.sumCard.allIn{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 @media print{.summary .sumCard.on{box-shadow:none}}
+.sumCard .entPartTxt{color:#a55a00;margin-left:2px}
+/* 朝食の入場人数(＋−) */
+.entStep{display:inline-flex;align-items:center;gap:2px;border:1px solid #ccc;border-radius:6px;background:#fff;padding:1px}
+.entStep button{width:24px;height:24px;border:none;background:#f3f4f6;border-radius:4px;font-size:15px;line-height:1;cursor:pointer;color:#333}
+.entStep button:hover:not(:disabled){background:#e3e8ee}
+.entStep button:disabled{opacity:.35;cursor:default}
+.entStep b{min-width:36px;text-align:center;font-size:12px;font-variant-numeric:tabular-nums}
+.entStep.part{border-color:#ef9f27}
+.entStep.full{border-color:#66bb6a;background:#eef7ee}
+.entTag{margin-left:4px;font-size:11px;padding:1px 6px;border-radius:999px}
+.entTag.part,.entPartial{background:#faeeda;color:#633806;border:1px solid #ef9f27}
+.entTag.full{background:#e3f2e3;color:#1b5e20;border:1px solid #66bb6a}
+.entPartial{display:inline-block;font-size:11px;padding:1px 7px;border-radius:999px}
+@media print{.entStep button{display:none}.entStep{border:none;background:none}}

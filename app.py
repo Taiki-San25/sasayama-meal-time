@@ -273,7 +273,7 @@ class TimeSlotIn(BaseModel):
 
 
 TRACKED = ("date", "nights", "night_no", "time_slot", "room", "guest_name", "adults", "children", "infants",
-           "allergy", "note", "group_id", "entered_at")
+           "allergy", "note", "group_id", "entered_at", "entered_count")
 GROUP_FIELDS = {"grouped", "group_with"}
 
 
@@ -438,6 +438,7 @@ def update_reservation(meal: str, rid: int, body: ReservationIn, user: User = De
         release_tables(db, r, user)
     else:
         reconcile_tables(db, r, user)
+    recount_entry(db, r, user)
     if old_group and old_group != r.group_id:
         shrink_group(db, old_group, user)
     db.commit()
@@ -469,12 +470,50 @@ def set_counts(meal: str, rid: int, body: CountsIn, user: User = Depends(current
     r = get_reservation(db, check_meal(meal), rid)
     change(db, r, body.model_dump(), user)
     reconcile_tables(db, r, user)
+    recount_entry(db, r, user)
     db.commit()
     return to_dict(r, user_names(db))
 
 
 class EnteredIn(BaseModel):
     entered: bool
+
+
+def entry_total(r: Reservation) -> int:
+    """入場を数える人数(大人+幼児。席のみは朝食を食べないので除く)"""
+    return r.adults + r.children
+
+
+def entry_values(r: Reservation, count: int, user: User) -> dict:
+    """入場人数から状態を決める。全員(人数未入力の予約は1)で入場済、途中は一部入場"""
+    total = entry_total(r)
+    count = max(0, min(count, total if total else 1))
+    full = count >= (total if total else 1)
+    return {"entered_count": count,
+            "entered_at": (r.entered_at or now_jst()) if full else None,
+            "entered_by": (r.entered_by or user.id) if full else None}
+
+
+def recount_entry(db: Session, r: Reservation, user: User) -> None:
+    """朝食で人数が変わったら、入場人数と状態を合わせる(増えたら一部入場に戻る)"""
+    if r.meal == "breakfast" and r.entered_count is not None:
+        change(db, r, entry_values(r, r.entered_count, user), user)
+
+
+class EnteredCountIn(BaseModel):
+    count: int = Field(ge=0, le=99)
+
+
+@app.patch("/api/breakfast/reservations/{rid}/entered_count")
+def set_entered_count(rid: int, body: EnteredCountIn, user: User = Depends(current_user),
+                      db: Session = Depends(get_db)):
+    """朝食の入場人数(0=空白、途中=一部入場、全員=入場済)。レストランと最上位ロールのみ"""
+    if user.role not in ENTRY_ROLES:
+        raise HTTPException(403, "入場の操作はレストランのみ可能です")
+    r = get_reservation(db, "breakfast", rid)
+    change(db, r, entry_values(r, body.count, user), user)
+    db.commit()
+    return to_dict(r, user_names(db))
 
 
 @app.patch("/api/{meal}/reservations/{rid}/entered")
@@ -484,7 +523,10 @@ def set_entered(meal: str, rid: int, body: EnteredIn, user: User = Depends(curre
     if user.role not in ENTRY_ROLES:
         raise HTTPException(403, "入場済の操作はレストランのみ可能です")
     r = get_reservation(db, check_meal(meal), rid)
-    if body.entered != (r.entered_at is not None):
+    if meal == "breakfast":  # 朝食は入場人数も合わせる
+        change(db, r, entry_values(r, (entry_total(r) or 1) if body.entered else 0, user), user)
+        db.commit()
+    elif body.entered != (r.entered_at is not None):
         change(db, r, {"entered_at": now_jst() if body.entered else None,
                        "entered_by": user.id if body.entered else None}, user)
         db.commit()
@@ -1310,7 +1352,8 @@ def summarize(db: Session, meal: str, start: date, end: date) -> dict:
         raise HTTPException(400, "終了日は開始日以降にしてください")
     if (end - start).days > 366:
         raise HTTPException(400, "期間は1年以内にしてください")
-    days = {start + timedelta(days=i): dict.fromkeys((k for k, _ in SUMMARY_COLS), 0)
+    cols = SUMMARY_COLS + ([("partial", "一部入場(組)")] if meal == "breakfast" else [])
+    days = {start + timedelta(days=i): dict.fromkeys((k for k, _ in cols), 0)
             for i in range((end - start).days + 1)}
     rows = db.scalars(select(Reservation).where(
         Reservation.meal == meal, Reservation.date >= start, Reservation.date <= end,
@@ -1321,11 +1364,13 @@ def summarize(db: Session, meal: str, start: date, end: date) -> dict:
         for k in SUMMED:
             a[k] += getattr(r, k)
         a["total"] += r.adults + r.children  # 席のみは計に含めない
-        a["entered"] += r.entered_at is not None
-    total = {k: sum(a[k] for a in days.values()) for k, _ in SUMMARY_COLS}
+        a["entered"] += r.entered_at is not None  # 全員入場した組
+        if meal == "breakfast":
+            a["partial"] += r.entered_at is None and bool(r.entered_count)
+    total = {k: sum(a[k] for a in days.values()) for k, _ in cols}
     return {
         "meal": meal, "start": start.isoformat(), "end": end.isoformat(),
-        "columns": [{"key": k, "label": l} for k, l in SUMMARY_COLS],
+        "columns": [{"key": k, "label": l} for k, l in cols],
         "days": [{"date": d.isoformat(), "weekday": WEEKDAYS[d.weekday()], **a} for d, a in days.items()],
         "total": total,
     }
@@ -1352,7 +1397,8 @@ def meal_summary_xlsx(meal: str, start: date, end: date, _: User = Depends(curre
     ws.append([f"出力日時 {now_jst():%Y/%m/%d %H:%M}(削除済みの予約は除く)"])
     ws["A2"].font = Font(size=9, color="777777")
     ws.append([])
-    head = ["日付", "曜日"] + [l for _, l in SUMMARY_COLS]
+    cols = [(c["key"], c["label"]) for c in data["columns"]]
+    head = ["日付", "曜日"] + [l for _, l in cols]
     ws.append(head)
     thin = Side(style="thin", color="BBBBBB")
     border = Border(top=thin, bottom=thin, left=thin, right=thin)
@@ -1362,13 +1408,13 @@ def meal_summary_xlsx(meal: str, start: date, end: date, _: User = Depends(curre
         c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
         c.border = border
     # 合計行は見出しの直後(5行目)
-    ws.append(["合計", ""] + [data["total"][k] for k, _ in SUMMARY_COLS])
+    ws.append(["合計", ""] + [data["total"][k] for k, _ in cols])
     for c in ws[ws.max_row]:
         c.font = Font(bold=True)
         c.fill = PatternFill("solid", fgColor="F2F2F2")
         c.border = Border(top=thin, left=thin, right=thin, bottom=Side(style="medium", color="8FA9C4"))
     for d in data["days"]:
-        ws.append([date.fromisoformat(d["date"]), d["weekday"]] + [d[k] for k, _ in SUMMARY_COLS])
+        ws.append([date.fromisoformat(d["date"]), d["weekday"]] + [d[k] for k, _ in cols])
         row = ws[ws.max_row]
         row[0].number_format = "yyyy/mm/dd"
         color = {"土": "185FA5", "日": "C0392B"}.get(d["weekday"])
@@ -1400,7 +1446,7 @@ def meal_summary_xlsx(meal: str, start: date, end: date, _: User = Depends(curre
 FIELD_LABELS = {
     "date": "日付", "nights": "泊数", "night_no": "何泊目", "time_slot": "時間", "room": "部屋",
     "guest_name": "代表者名", "adults": "大人", "children": "幼児", "infants": "席のみ",
-    "allergy": "アレルギー", "note": "備考", "group_id": "グループ", "entered_at": "ステータス",
+    "allergy": "アレルギー", "note": "備考", "group_id": "グループ", "entered_at": "ステータス", "entered_count": "入場人数",
     "tables": "テーブル",
 }
 RES_ACTIONS = {"create": "登録", "update": "変更", "delete": "削除", "restore": "復元", "table_memo": "卓メモを変更", "table_counts": "卓の人数を変更",
@@ -1417,6 +1463,8 @@ def fmt_value(field: str, v) -> str:
         return "あり" if v else "なし"
     if field == "entered_at":
         return "入場済" if v else "空白"
+    if field == "entered_count":
+        return "-" if v is None else f"{v}名"
     if field == "tables":
         return "・".join(v) if v else "なし"
     return "(空欄)" if v in (None, "") else str(v)
@@ -1452,7 +1500,9 @@ def operation_logs(start: date, end: date, _: User = Depends(current_user), db: 
                            .where(ReservationHistory.changed_at >= t0, ReservationHistory.changed_at < t1)):
         logs.append({
             "_id": h.id, "at": iso(h.changed_at), "kind": "reservation", "kind_label": "予約",
-            "action": "入場済" if set(h.changes) == {"entered_at"} else RES_ACTIONS.get(h.action, h.action),
+            "action": "入場済" if set(h.changes) == {"entered_at"}
+                      else "入場" if h.changes and set(h.changes) <= {"entered_at", "entered_count"}
+                      else RES_ACTIONS.get(h.action, h.action),
             "target": f"{MEAL_LABELS.get(r.meal, '')} {r.date:%m/%d} {r.room} {r.guest_name}".strip(),
             "link": f"/{r.meal}?d={r.date.isoformat()}&hl={r.id}",
             "detail": f"卓 {(h.changes or {}).get('table', '')}" if h.action == "table_memo"
