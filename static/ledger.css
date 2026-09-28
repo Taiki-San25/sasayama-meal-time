@@ -52,6 +52,8 @@ body.dayFuture{background:rgba(227,238,250,.5)}
 .ledgerTable tbody tr.deleted .entBadge{background:#e6e6e6;color:#999}
 .ledgerTable td.room{font-weight:700;white-space:nowrap}
 .ledgerTable td.resvNo{white-space:nowrap;color:#555;font-variant-numeric:tabular-nums}
+.ledgerTable td.tblNo{white-space:nowrap;font-weight:700}
+.ledgerTable td.tblNo a{color:#185fa5;text-decoration:none}
 .ledgerTable td{white-space:nowrap}
 .ledgerTable td.empty{white-space:normal}
 .ledgerTable td.note,.ledgerTable td.allergyCell{white-space:pre-wrap;min-width:160px}

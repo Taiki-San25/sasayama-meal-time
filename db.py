@@ -3,7 +3,7 @@ import os
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-from sqlalchemy import (JSON, Boolean, Date, DateTime, ForeignKey, Integer, String, Text,
+from sqlalchemy import (JSON, Boolean, Date, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint,
                         create_engine, func, inspect, select, text)
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
@@ -30,6 +30,7 @@ ROLES = {"developer": "developer", "admin": "管理者", "front": "フロント"
 ADMIN_ROLES = ("developer", "admin")  # 管理者ページ・管理者APIを使えるロール
 ENTRY_ROLES = ("developer", "restaurant")  # 入場済を操作できるロール
 IMPORT_ROLES = ("developer", "admin", "front")  # CSV取込ができるロール
+LAYOUT_ROLES = ("developer", "admin", "restaurant")  # テーブル配置を編集できるロール
 DEFAULT_SLOTS = {
     "dinner": ["17:30", "18:00", "18:30", "19:00", "19:30", "20:00"],
     "breakfast": ["07:00", "07:30", "08:00", "08:30", "09:00"],
@@ -139,6 +140,30 @@ class ReservationHistory(Base):
     changes: Mapped[dict] = mapped_column(JSON, default=dict)  # {項目: [変更前, 変更後]}
     changed_at: Mapped[datetime] = mapped_column(DateTime, default=now_jst)
     changed_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+
+
+class FloorLayout(Base):
+    """テーブル配置。date が None なら基本レイアウト、日付ありはその日だけの配置"""
+    __tablename__ = "floor_layouts"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    date: Mapped[date | None] = mapped_column(Date, nullable=True, unique=True)
+    # [{id, name, seats, x, y, w, h, parts?}] parts は連結前の卓(解除用)
+    tables: Mapped[list] = mapped_column(JSON, default=list)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_jst)
+    updated_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+
+
+class TableAssignment(Base):
+    """夕食のテーブル割り当て(日付+時間枠+卓ごと。相席可、1予約が複数卓も可)"""
+    __tablename__ = "table_assignments"
+    __table_args__ = (UniqueConstraint("date", "time_slot", "table_id", "reservation_id"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    date: Mapped[date] = mapped_column(Date, index=True)
+    time_slot: Mapped[str] = mapped_column(String(16))
+    table_id: Mapped[str] = mapped_column(String(32))
+    reservation_id: Mapped[int] = mapped_column(ForeignKey("reservations.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_jst)
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
 
 
 # 既存テーブルに後から追加した列: (テーブル, 列, 型とデフォルト, 追加直後に流すSQL)

@@ -90,6 +90,7 @@ window.AMT = (function () {
     ],
     mainMenu: [
       { label: '夕食時間管理表', icon: 'ti-moon', href: '/dinner' },
+      { label: 'テーブルアサイン', icon: 'ti-armchair', href: '/tables' },
       { label: '夕食集計', icon: 'ti-chart-bar', href: '/dinner-summary' },
       { label: '朝食時間管理表', icon: 'ti-sun', href: '/breakfast' },
       { label: '朝食集計', icon: 'ti-chart-bar', href: '/breakfast-summary' },

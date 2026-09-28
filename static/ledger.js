@@ -21,6 +21,7 @@
     { key: 'status', label: 'ステータス', val: r => (r.entered_at ? 1 : 0) },
     { key: 'resv_no', label: '予約番号', val: byText('resv_no') },
     { key: 'room', label: '部屋', val: byText('room') },
+    ...(MEAL === 'dinner' ? [{ key: 'tables', label: 'テーブル', val: r => (r.tables || []).join('・') }] : []),
     { key: 'guest_name', label: '代表者名', val: byText('guest_name') },
     { key: 'nights', label: '泊数', val: r => r.nights * 100 + r.night_no },
     { key: 'adults', label: '大人', num: true, val: r => r.adults },
@@ -112,7 +113,7 @@
     return `${y === String(new Date().getFullYear()) ? '' : y + '/'}${+mo}/${+da} ${t.slice(0, 5)}`;
   };
   const FIELD_LABELS = { date: '日付', time_slot: '時間', room: '部屋', guest_name: '代表者名', adults: '大人',
-    children: '幼児', infants: '席のみ', nights: '泊数', night_no: '何泊目', group_id: 'グループ', entered_at: 'ステータス', allergy: 'アレルギー', note: '備考' };
+    children: '幼児', infants: '席のみ', tables: 'テーブル', nights: '泊数', night_no: '何泊目', group_id: 'グループ', entered_at: 'ステータス', allergy: 'アレルギー', note: '備考' };
   const nightsLabel = r => `${r.night_no}泊/${r.nights}泊`;
   const ACTION_LABELS = { create: '登録', update: '変更', delete: '削除', restore: '復元', import: 'CSV取込', import_update: 'CSV取込(更新)' };
   // 複数部屋(「, 」区切り)は「115 他14室」と表示し、ホバーで全室
@@ -127,6 +128,7 @@
   const fmtVal = (f, v) => f === 'time_slot' ? (v || '未定')
     : f === 'group_id' ? (v ? 'あり' : 'なし')
     : f === 'entered_at' ? (v ? `入場済(${fmtTs(v)})` : '空白')
+    : Array.isArray(v) ? (v.length ? v.join('・') : 'なし')
     : (v === '' || v === null ? '(空欄)' : String(v));
 
   // グループ: この日の有効な予約のグループ(単体を含む)に G1, G2… を振る(時間→部屋順)
@@ -228,6 +230,7 @@
         <td class="status">${statusCell(r)}</td>
         <td class="resvNo">${esc(r.resv_no || '')}</td>
         <td class="room">${roomLabel(r.room)}${groupTag(groups[r.group_id])}</td>
+        ${MEAL === 'dinner' ? `<td class="tblNo">${(r.tables || []).length ? `<a href="/tables?d=${r.date}&t=${encodeURIComponent(r.time_slot || '')}">${esc(r.tables.join('・'))}</a>` : ''}</td>` : ''}
         <td class="guest">${esc(r.guest_name)}</td>
         <td class="nights">${r.night_no >= 2 ? `<span class="stayBadge" title="連泊の${r.night_no}泊目">${nightsLabel(r)}</span>` : nightsLabel(r)}</td>
         <td class="num">${r.adults}</td><td class="num">${r.children}</td><td class="num">${r.infants}</td>

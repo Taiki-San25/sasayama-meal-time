@@ -1,0 +1,97 @@
+/* tables.css — テーブルアサイン */
+body.dayPast{background:rgba(233,233,233,.5)}
+body.dayFuture{background:rgba(227,238,250,.5)}
+.flBar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.flBar .dateNav{display:flex;align-items:center;gap:4px}
+.flBar .barRight{margin-left:auto;display:flex;gap:8px}
+.slotTabs{display:flex;gap:4px;flex-wrap:wrap}
+.slotTab{display:inline-flex;align-items:baseline;gap:6px;height:34px;padding:0 12px;border:1px solid #ccc;border-radius:8px;
+  background:#fff;font:inherit;font-size:14px;font-weight:700;cursor:pointer;color:#333}
+.slotTab small{font-size:11px;font-weight:400;color:#777}
+.slotTab.on{background:#185fa5;border-color:#185fa5;color:#fff}
+.slotTab.on small{color:#dbe9f7}
+
+.editBar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 10px;margin-bottom:10px;
+  background:#fff9ec;border:1px solid #f0c36d;border-radius:8px}
+.editBar .ebTarget{display:flex;gap:12px;font-size:13px}
+.editBar .ebTarget label{display:flex;align-items:center;gap:4px;cursor:pointer}
+.editBar .ebAdd{display:flex;align-items:center;gap:4px;font-size:13px}
+.editBar .ebAdd select{height:34px}
+.editBar .ebSep{width:1px;height:24px;background:#e5d3a8}
+.editBar .ebSpacer{flex:1}
+.editBar .btn[disabled]{opacity:.45;cursor:default}
+
+.flBody{display:grid;grid-template-columns:minmax(0,1fr) 270px;gap:12px;align-items:start}
+.flList{background:#fff;border:1px solid #e3e3e3;border-radius:10px;padding:10px;max-height:calc(100vh - 210px);overflow:auto}
+.flList h3{display:flex;justify-content:space-between;margin:6px 0 6px;font-size:13px;color:#555}
+.flList h3 span{font-weight:400;color:#888}
+.flList .empty{font-size:12px;margin:0 0 10px}
+.flList .small{font-size:12px}
+.unsetNote{display:flex;gap:4px;font-size:12px;margin:10px 0 0}
+.resCard{border:1px solid #dde3ea;border-radius:8px;padding:6px 8px;margin-bottom:6px;background:#fff;cursor:grab;
+  touch-action:pan-y;user-select:none;-webkit-user-select:none}
+.resCard:hover{border-color:#85b7eb}
+.resCard.sel{border-color:#185fa5;background:#e6f1fb;box-shadow:0 0 0 2px #b5d4f4}
+.resCard.entered{background:#eef7ee}
+.rcTop{display:flex;gap:6px;align-items:baseline;font-size:14px}
+.rcName{font-size:13px;color:#333;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rcSub{display:flex;flex-wrap:wrap;gap:4px 8px;font-size:12px;color:#666;margin-top:2px}
+.rcAllergy{color:#c0392b}
+.rcEntered{display:inline-block;font-size:11px;padding:0 6px;border-radius:999px;background:#2e7d32;color:#fff}
+.rcTables{color:#185fa5}
+
+.flMapWrap{background:#fff;border:1px solid #e3e3e3;border-radius:10px;padding:8px}
+.flHint{margin:0 0 6px;font-size:12px;color:#666;min-height:18px}
+.flMap{display:block;width:100%;height:auto;user-select:none;-webkit-user-select:none}
+.flMap .wall{fill:none;stroke:#9aa5b1;stroke-width:3}
+.flMap .wall.thin{stroke-width:1.5}
+.flMap .fixture{fill:#f3f4f6;stroke:#c3cad3;stroke-width:1.5}
+.flMap .label{font-size:22px;fill:#8a94a0;text-anchor:middle;dominant-baseline:middle}
+.flMap .label.small{font-size:13px}
+.tbl{cursor:pointer;touch-action:none;outline:none}
+.tbl rect{fill:#fff;stroke:#8a99aa;stroke-width:1.5}
+.tbl text{pointer-events:none}
+.tbl .tName{font-size:14px;font-weight:700;fill:#333}
+.tbl .tSeats{font-size:10px;fill:#888;text-anchor:end}
+.tbl .tRoom{font-size:13px;font-weight:700;fill:#0c447c;text-anchor:middle}
+.tbl .tPeople{font-size:11px;fill:#555;text-anchor:middle}
+.tbl.merged rect{stroke-dasharray:5 3}
+.tbl.busy rect{fill:#e6f1fb;stroke:#378add}
+.tbl.entered rect{fill:#dff0df;stroke:#2e7d32}
+.tbl.entered .tRoom{fill:#1b5e20}
+.tbl .tIn{fill:#1b5e20}
+.tbl.partEntered rect{stroke:#2e7d32;stroke-dasharray:5 3}
+.tbl.full rect{stroke:#e24b4a;stroke-width:2.5}
+.tbl.full .tPeople,.tbl.full .tSeats{fill:#c0392b;font-weight:700}
+.tbl.mine rect{stroke:#185fa5;stroke-width:3}
+.tbl.moving rect{stroke:#ef9f27;stroke-width:3;stroke-dasharray:6 3}
+.tbl.over rect,.tbl:focus-visible rect{stroke:#ef9f27;stroke-width:3}
+.tbl.picked rect{stroke:#e24b4a;stroke-width:3}
+.tbl:hover rect{stroke-width:2.5}
+body.floorEditing .tbl{cursor:move}
+.dragGhost{position:fixed;z-index:200;pointer-events:none;padding:4px 10px;border-radius:6px;background:#185fa5;color:#fff;
+  font-size:13px;box-shadow:0 4px 12px rgba(0,0,0,.2);white-space:nowrap}
+body.dragging,body.dragging *{cursor:grabbing !important}
+
+.tblInfo p{margin:0 0 4px}
+.tblInfo .allergy{color:#c0392b}
+.tblInfo .overTxt{color:#c0392b;font-weight:700;display:flex;gap:4px;align-items:center}
+.tiRow{display:flex;gap:10px;align-items:flex-start;justify-content:space-between;padding:8px 0;border-top:1px solid #eee}
+.tiRow:first-of-type{border-top:none}
+.tiBtns{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;flex-shrink:0}
+.tiBtns .btn{height:30px;padding:0 10px;font-size:12px}
+@media (max-width:640px){.tiRow{flex-direction:column}}
+.printTitle{display:none}
+@media (max-width:900px){
+  .flBody{grid-template-columns:1fr}
+  .flList{max-height:260px}
+}
+@media print{
+  @page{size:A4 landscape;margin:10mm}
+  body.dayPast,body.dayFuture{background:#fff}
+  .printTitle{display:block;font-size:16px;margin:0 0 8px}
+  .flBody{display:block}
+  .flMapWrap{border:none;padding:0}
+  .flHint{display:none}
+  .tbl rect{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}

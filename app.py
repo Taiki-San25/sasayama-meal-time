@@ -19,8 +19,9 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
+import floor
 import importer
-from db import (ADMIN_ROLES, ENTRY_ROLES, IMPORT_ROLES, MEALS, ROLES, AuthLog, ChatMessage, ChatRead, Reservation, ReservationHistory, SessionLocal, TimeSlot,
+from db import (ADMIN_ROLES, ENTRY_ROLES, IMPORT_ROLES, LAYOUT_ROLES, MEALS, FloorLayout, TableAssignment, ROLES, AuthLog, ChatMessage, ChatRead, Reservation, ReservationHistory, SessionLocal, TimeSlot,
                 User, init_db, now_jst)
 from security import hash_password, verify_password
 
@@ -353,7 +354,12 @@ def list_reservations(meal: str, d: date, include_deleted: bool = False, _: User
     if not include_deleted:
         q = q.where(Reservation.deleted_at.is_(None))
     names = user_names(db)
-    return [to_dict(r, names) for r in db.scalars(q.order_by(Reservation.room, Reservation.id))]
+    rows = [to_dict(r, names) for r in db.scalars(q.order_by(Reservation.room, Reservation.id))]
+    if meal == "dinner":
+        tables = reservation_tables(db, d)
+        for r in rows:
+            r["tables"] = tables.get(r["id"], [])
+    return rows
 
 
 @app.post("/api/{meal}/reservations")
@@ -403,7 +409,10 @@ def update_reservation(meal: str, rid: int, body: ReservationIn, user: User = De
         t = group_target(db, meal, r.date, body.group_with, r.id)
         if not (r.group_id and t.group_id == r.group_id):
             values["group_id"] = ensure_group(db, t, user)
+    old_time = r.time_slot
     change(db, r, values, user)
+    if old_time != r.time_slot:
+        release_tables(db, r, user)
     if old_group and old_group != r.group_id:
         shrink_group(db, old_group, user)
     db.commit()
@@ -414,7 +423,10 @@ def update_reservation(meal: str, rid: int, body: ReservationIn, user: User = De
 def set_time(meal: str, rid: int, body: TimeSlotIn, user: User = Depends(current_user),
              db: Session = Depends(get_db)):
     r = get_reservation(db, check_meal(meal), rid)
+    old_time = r.time_slot
     change(db, r, {"time_slot": body.time_slot}, user)
+    if old_time != r.time_slot:
+        release_tables(db, r, user)
     db.commit()
     return to_dict(r, user_names(db))
 
@@ -443,6 +455,7 @@ def delete_reservation(meal: str, rid: int, user: User = Depends(current_user), 
     r = get_reservation(db, check_meal(meal), rid)
     r.deleted_at, r.deleted_by = now_jst(), user.id
     record(db, r, user, "delete", {})
+    release_tables(db, r, user)
     db.commit()
     return to_dict(r, user_names(db))
 
@@ -466,6 +479,267 @@ def reservation_history(meal: str, rid: int, _: User = Depends(current_user), db
                       .order_by(ReservationHistory.id.desc()))
     return [{"action": h.action, "changes": h.changes, "changed_at": iso(h.changed_at),
              "changed_by": names.get(h.changed_by, "")} for h in rows]
+
+
+# ---------- テーブルアサイン(夕食) ----------
+class FloorTableIn(BaseModel):
+    id: str = Field(pattern=r"^[A-Za-z0-9_-]{1,32}$")
+    name: str = Field(min_length=1, max_length=16)
+    seats: int = Field(ge=1, le=60)
+    x: int = Field(ge=0, le=floor.CANVAS_W)
+    y: int = Field(ge=0, le=floor.CANVAS_H)
+    w: int = Field(ge=20, le=floor.CANVAS_W)
+    h: int = Field(ge=20, le=floor.CANVAS_H)
+    parts: list[dict] | None = None  # 連結前の卓(解除用)
+
+    _name = field_validator("name")(lambda v: v.strip())
+
+
+class FloorLayoutIn(BaseModel):
+    tables: list[FloorTableIn] = Field(max_length=200)
+
+
+class AssignIn(BaseModel):
+    date: date
+    time_slot: str
+    table_id: str
+    reservation_id: int
+
+
+class UnassignIn(BaseModel):
+    date: date
+    time_slot: str
+    table_id: str
+    reservation_id: int | None = None  # 省略時はその卓の全予約
+
+
+class MoveIn(UnassignIn):
+    to_table_id: str
+
+
+def layout_row(db: Session, d: date | None) -> FloorLayout | None:
+    q = select(FloorLayout).where(FloorLayout.date.is_(None) if d is None else FloorLayout.date == d)
+    return db.scalar(q)
+
+
+def base_tables(db: Session) -> list[dict]:
+    row = layout_row(db, None)
+    return row.tables if row else floor.DEFAULT_TABLES
+
+
+def effective_tables(db: Session, d: date) -> tuple[list[dict], bool]:
+    """その日の配置(なければ基本レイアウト)と、その日専用の配置かどうか"""
+    row = layout_row(db, d)
+    return (row.tables, True) if row else (base_tables(db), False)
+
+
+def save_layout(db: Session, d: date | None, tables: list[dict], user: User) -> None:
+    row = layout_row(db, d)
+    if not row:
+        row = FloorLayout(date=d)
+        db.add(row)
+    row.tables, row.updated_at, row.updated_by = tables, now_jst(), user.id
+
+
+def table_names(db: Session, d: date) -> dict[str, str]:
+    return {t["id"]: t["name"] for t in effective_tables(db, d)[0]}
+
+
+def reservation_tables(db: Session, d: date) -> dict[int, list[str]]:
+    """予約ID → 割り当てた卓名(配置の並び順)"""
+    tables = effective_tables(db, d)[0]
+    order = {t["id"]: i for i, t in enumerate(tables)}
+    names = {t["id"]: t["name"] for t in tables}
+    out: dict[int, list[tuple[int, str]]] = {}
+    for a in db.scalars(select(TableAssignment).where(TableAssignment.date == d)):
+        if a.table_id in names:
+            out.setdefault(a.reservation_id, []).append((order[a.table_id], names[a.table_id]))
+    return {rid: [n for _, n in sorted(v)] for rid, v in out.items()}
+
+
+def record_tables(db: Session, r: Reservation, user: User, before: list[str]) -> None:
+    after = reservation_tables(db, r.date).get(r.id, [])
+    if before != after:
+        record(db, r, user, "update", {"tables": [before, after]})
+
+
+def release_tables(db: Session, r: Reservation, user: User) -> None:
+    """予約の時間変更・削除時に、その予約のテーブル割り当てを外す"""
+    if r.meal != "dinner":
+        return
+    rows = list(db.scalars(select(TableAssignment).where(TableAssignment.reservation_id == r.id)))
+    if not rows:
+        return
+    before = reservation_tables(db, r.date).get(r.id, [])
+    for a in rows:
+        db.delete(a)
+    db.flush()
+    record_tables(db, r, user, before)
+
+
+def layout_user(user: User = Depends(current_user)) -> User:
+    if user.role not in LAYOUT_ROLES:
+        raise HTTPException(403, "テーブル配置の編集権限がありません")
+    return user
+
+
+@app.get("/api/floor")
+def floor_view(d: date, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    tables, own = effective_tables(db, d)
+    names = user_names(db)
+    rows = db.scalars(select(Reservation).where(Reservation.meal == "dinner", Reservation.date == d,
+                                                Reservation.deleted_at.is_(None)))
+    return {
+        "date": d.isoformat(), "canvas": {"w": floor.CANVAS_W, "h": floor.CANVAS_H},
+        "tables": tables, "own_layout": own, "can_edit_layout": user.role in LAYOUT_ROLES,
+        "slots": slot_labels(db, "dinner"),
+        "reservations": [to_dict(r, names) for r in rows],
+        "assignments": [{"time_slot": a.time_slot, "table_id": a.table_id, "reservation_id": a.reservation_id}
+                        for a in db.scalars(select(TableAssignment).where(TableAssignment.date == d))],
+    }
+
+
+@app.get("/api/floor/base")
+def floor_base(_: User = Depends(current_user), db: Session = Depends(get_db)):
+    return {"tables": base_tables(db), "canvas": {"w": floor.CANVAS_W, "h": floor.CANVAS_H}}
+
+
+def check_layout(body: FloorLayoutIn) -> list[dict]:
+    tables = [t.model_dump(exclude_none=True) for t in body.tables]
+    ids = [t["id"] for t in tables]
+    if len(set(ids)) != len(ids):
+        raise HTTPException(400, "卓のIDが重複しています")
+    seen = set()
+    for t in tables:
+        if t["name"] in seen:
+            raise HTTPException(400, f"卓番号「{t['name']}」が重複しています")
+        seen.add(t["name"])
+    return tables
+
+
+@app.put("/api/floor/base")
+def put_floor_base(body: FloorLayoutIn, user: User = Depends(layout_user), db: Session = Depends(get_db)):
+    save_layout(db, None, check_layout(body), user)
+    db.commit()
+    return {"tables": base_tables(db)}
+
+
+@app.put("/api/floor/layout")
+def put_floor_layout(d: date, body: FloorLayoutIn, user: User = Depends(layout_user),
+                     db: Session = Depends(get_db)):
+    """その日の配置を保存する。なくなった卓の割り当ては外す"""
+    tables = check_layout(body)
+    keep = {t["id"] for t in tables}
+    removed = list(db.scalars(select(TableAssignment).where(TableAssignment.date == d,
+                                                            TableAssignment.table_id.not_in(keep))))
+    before = reservation_tables(db, d)
+    for a in removed:
+        db.delete(a)
+    save_layout(db, d, tables, user)
+    db.flush()
+    after = reservation_tables(db, d)
+    for rid in {a.reservation_id for a in removed}:
+        r = db.get(Reservation, rid)
+        if r and before.get(rid, []) != after.get(rid, []):
+            record(db, r, user, "update", {"tables": [before.get(rid, []), after.get(rid, [])]})
+    # 卓名の変更も割り当て済みの予約の履歴に残す
+    for rid, names_ in after.items():
+        if rid not in {a.reservation_id for a in removed} and before.get(rid, []) != names_:
+            r = db.get(Reservation, rid)
+            if r:
+                record(db, r, user, "update", {"tables": [before.get(rid, []), names_]})
+    db.commit()
+    return {"tables": tables, "released": len(removed)}
+
+
+@app.delete("/api/floor/layout")
+def reset_floor_layout(d: date, user: User = Depends(layout_user), db: Session = Depends(get_db)):
+    """その日の配置を基本レイアウトに戻す(基本にない卓の割り当ては外す)"""
+    body = FloorLayoutIn(tables=[FloorTableIn(**t) for t in base_tables(db)])
+    result = put_floor_layout(d, body, user, db)
+    row = layout_row(db, d)
+    if row:
+        db.delete(row)
+        db.commit()
+    return result
+
+
+def assign_target(db: Session, d: date, table_id: str) -> None:
+    if table_id not in table_names(db, d):
+        raise HTTPException(400, "テーブルが見つかりません")
+
+
+def assigned(db: Session, d: date, time_slot: str, table_id: str, rid: int | None = None) -> list[TableAssignment]:
+    q = select(TableAssignment).where(TableAssignment.date == d, TableAssignment.time_slot == time_slot,
+                                      TableAssignment.table_id == table_id)
+    if rid is not None:
+        q = q.where(TableAssignment.reservation_id == rid)
+    return list(db.scalars(q))
+
+
+def freeze_layout(db: Session, d: date, user: User) -> None:
+    """割り当てた日は、後で基本レイアウトを変えても崩れないようにその日の配置として保存する"""
+    tables, own = effective_tables(db, d)
+    if not own:
+        save_layout(db, d, tables, user)
+
+
+@app.post("/api/floor/assign")
+def floor_assign(body: AssignIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    r = get_reservation(db, "dinner", body.reservation_id)
+    if r.date != body.date or r.time_slot != body.time_slot:
+        raise HTTPException(400, "予約の日付・時間が一致しません。画面を更新してください")
+    assign_target(db, body.date, body.table_id)
+    if assigned(db, body.date, body.time_slot, body.table_id, r.id):
+        return {"ok": True}  # すでにこの卓に割り当て済み
+    freeze_layout(db, body.date, user)
+    before = reservation_tables(db, body.date).get(r.id, [])
+    db.add(TableAssignment(date=body.date, time_slot=body.time_slot, table_id=body.table_id,
+                           reservation_id=r.id, created_at=now_jst(), created_by=user.id))
+    db.flush()
+    record_tables(db, r, user, before)
+    db.commit()
+    return {"ok": True}
+
+
+def find_assignments(db: Session, body: UnassignIn) -> list[TableAssignment]:
+    rows = assigned(db, body.date, body.time_slot, body.table_id, body.reservation_id)
+    if not rows:
+        raise HTTPException(400, "割り当てが見つかりません。画面を更新してください")
+    return rows
+
+
+@app.post("/api/floor/unassign")
+def floor_unassign(body: UnassignIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    rows = find_assignments(db, body)
+    before = reservation_tables(db, body.date)
+    for a in rows:
+        db.delete(a)
+    db.flush()
+    for a in rows:
+        record_tables(db, db.get(Reservation, a.reservation_id), user, before.get(a.reservation_id, []))
+    db.commit()
+    return {"ok": True}
+
+
+@app.post("/api/floor/move")
+def floor_move(body: MoveIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """卓の予約(reservation_id 省略時は全部)を別の卓へ移す。移動先に同じ予約があれば1つにまとめる"""
+    rows = find_assignments(db, body)
+    assign_target(db, body.date, body.to_table_id)
+    if body.to_table_id == body.table_id:
+        return {"ok": True}
+    before = reservation_tables(db, body.date)
+    for a in rows:
+        if assigned(db, body.date, body.time_slot, body.to_table_id, a.reservation_id):
+            db.delete(a)
+        else:
+            a.table_id = body.to_table_id
+    db.flush()
+    for a in rows:
+        record_tables(db, db.get(Reservation, a.reservation_id), user, before.get(a.reservation_id, []))
+    db.commit()
+    return {"ok": True}
 
 
 # ---------- CSV取込(宿泊者リスト) ----------
@@ -897,6 +1171,7 @@ FIELD_LABELS = {
     "date": "日付", "nights": "泊数", "night_no": "何泊目", "time_slot": "時間", "room": "部屋",
     "guest_name": "代表者名", "adults": "大人", "children": "幼児", "infants": "席のみ",
     "allergy": "アレルギー", "note": "備考", "group_id": "グループ", "entered_at": "ステータス",
+    "tables": "テーブル",
 }
 RES_ACTIONS = {"create": "登録", "update": "変更", "delete": "削除", "restore": "復元",
                "import": "CSV取込", "import_update": "CSV取込(更新)"}
@@ -912,6 +1187,8 @@ def fmt_value(field: str, v) -> str:
         return "あり" if v else "なし"
     if field == "entered_at":
         return "入場済" if v else "空白"
+    if field == "tables":
+        return "・".join(v) if v else "なし"
     return "(空欄)" if v in (None, "") else str(v)
 
 
@@ -972,7 +1249,7 @@ def operation_logs(start: date, end: date, _: User = Depends(current_user), db: 
 
 
 # ---------- ページ ----------
-PAGES = {"dinner", "breakfast", "dinner-summary", "breakfast-summary", "chat", "logs", "admin"}
+PAGES = {"dinner", "tables", "breakfast", "dinner-summary", "breakfast-summary", "chat", "logs", "admin"}
 
 
 @app.get("/favicon.ico", include_in_schema=False)
