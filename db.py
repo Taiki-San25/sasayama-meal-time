@@ -29,6 +29,7 @@ MEALS = ("dinner", "breakfast")
 ROLES = {"developer": "developer", "admin": "管理者", "front": "フロント", "restaurant": "レストラン"}
 ADMIN_ROLES = ("developer", "admin")  # 管理者ページ・管理者APIを使えるロール
 ENTRY_ROLES = ("developer", "restaurant")  # 入場済を操作できるロール
+IMPORT_ROLES = ("developer", "admin", "front")  # CSV取込ができるロール
 DEFAULT_SLOTS = {
     "dinner": ["17:30", "18:00", "18:30", "19:00", "19:30", "20:00"],
     "breakfast": ["07:00", "07:30", "08:00", "08:30", "09:00"],
@@ -100,7 +101,7 @@ class Reservation(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     meal: Mapped[str] = mapped_column(String(16), index=True)
     date: Mapped[date] = mapped_column(Date, index=True)
-    room: Mapped[str] = mapped_column(String(32))
+    room: Mapped[str] = mapped_column(String(255))  # 複数部屋は「, 」区切り
     guest_name: Mapped[str] = mapped_column(String(128))
     adults: Mapped[int] = mapped_column(Integer, default=0)
     children: Mapped[int] = mapped_column(Integer, default=0)
@@ -126,6 +127,7 @@ class Reservation(Base):
     deleted_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     entered_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # ステータス: None=空白, あり=入場済
     entered_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    ext_key: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)  # CSV取込元の予約番号-枝番
 
 
 class ReservationHistory(Base):
@@ -133,7 +135,7 @@ class ReservationHistory(Base):
     __tablename__ = "reservation_history"
     id: Mapped[int] = mapped_column(primary_key=True)
     reservation_id: Mapped[int] = mapped_column(ForeignKey("reservations.id"), index=True)
-    action: Mapped[str] = mapped_column(String(16))  # create / update / delete / restore
+    action: Mapped[str] = mapped_column(String(16))  # create / update / delete / restore / import / import_update
     changes: Mapped[dict] = mapped_column(JSON, default=dict)  # {項目: [変更前, 変更後]}
     changed_at: Mapped[datetime] = mapped_column(DateTime, default=now_jst)
     changed_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
@@ -153,7 +155,10 @@ ADDED_COLUMNS = [
     ("reservations", "free_child", "INTEGER NOT NULL DEFAULT 0", None),
     ("reservations", "child_coupon", "INTEGER NOT NULL DEFAULT 0", None),
     ("reservations", "outside", "INTEGER NOT NULL DEFAULT 0", None),
+    ("reservations", "ext_key", "VARCHAR(64)", "CREATE INDEX IF NOT EXISTS ix_reservations_ext_key ON reservations (ext_key)"),
 ]
+# 後から桁数を広げた文字列の列: (テーブル, 列, 桁数)。SQLite は桁数を見ないので PostgreSQL のみ
+WIDENED_COLUMNS = [("reservations", "room", 255)]
 
 
 def _migrate() -> None:
@@ -164,6 +169,11 @@ def _migrate() -> None:
                 conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}"))
                 if backfill:
                     conn.execute(text(backfill))
+        if engine.dialect.name == "postgresql":
+            for table, col, length in WIDENED_COLUMNS:
+                cur = next(c for c in insp.get_columns(table) if c["name"] == col)
+                if (getattr(cur["type"], "length", None) or length) < length:
+                    conn.execute(text(f"ALTER TABLE {table} ALTER COLUMN {col} TYPE VARCHAR({length})"))
 
 
 def init_db() -> None:

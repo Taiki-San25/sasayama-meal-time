@@ -82,7 +82,9 @@ window.AMT = (function () {
     siteName: 'グランヴィリオホテル丹波篠山　喫食時間管理表',
     favicon: '/static/logo.png',  // 上部バーのロゴ(favicon.ico から余白を除いたもの)
     ticker: '',             // お知らせ(空なら非表示)
+    // roles: 表示するロール(省略時は全員)
     topButtons: [
+      { label: 'アップロード', icon: 'ti-upload', type: 'normal', href: '#import', roles: ['developer', 'admin', 'front'] },
       { label: 'パスワード変更', icon: 'ti-key', type: 'normal', href: '#password' },
       { label: 'ログアウト', icon: 'ti-logout', type: 'normal', href: '/logout' }
     ],
@@ -128,7 +130,7 @@ window.AMT = (function () {
     </div>
     ${CONFIG.ticker ? `<div class="ticker"><i class="ti ti-speakerphone"></i><span>${esc(CONFIG.ticker)}</span></div>` : ''}
     <div class="tbRight">
-      ${CONFIG.topButtons.map(b => `<a class="pillBtn ${b.type}" href="${b.href}" title="${esc(b.label)}" style="text-decoration:none"><i class="ti ${b.icon}"></i><span class="btnLbl">${esc(b.label)}</span></a>`).join('')}
+      ${CONFIG.topButtons.map(b => `<a class="pillBtn ${b.type}" href="${b.href}" title="${esc(b.label)}" style="text-decoration:none"${b.roles ? ` data-roles="${b.roles.join(' ')}" hidden` : ''}><i class="ti ${b.icon}"></i><span class="btnLbl">${esc(b.label)}</span></a>`).join('')}
     </div>`;
 
   // サイドバー
@@ -185,6 +187,7 @@ window.AMT = (function () {
     setUser(d.name);
     sidebar.querySelector('.userName').title = `${d.name}(${d.role_label})`;
     adminEls.forEach(el => { el.hidden = !d.is_admin; });
+    topbar.querySelectorAll('[data-roles]').forEach(el => { el.hidden = !el.dataset.roles.split(' ').includes(d.role); });
     return d;
   });
 
@@ -231,5 +234,107 @@ window.AMT = (function () {
         }
       }]
     });
+  });
+
+  // CSVアップロード(宿泊者リスト①予約・②部屋割りの2ファイルがそろったら取り込める)
+  topbar.querySelector('a[href="#import"]').addEventListener('click', e => {
+    e.preventDefault();
+    let files = [];  // [{name, data(base64)}]
+    let seq = 0;     // 最新の確認結果だけを反映する
+    const readB64 = f => new Promise((ok, ng) => {
+      const fr = new FileReader();
+      fr.onload = () => ok(String(fr.result).split(',')[1] || '');
+      fr.onerror = () => ng(fr.error);
+      fr.readAsDataURL(f);
+    });
+    const md = s => { const [, m, d] = s.split('-'); return `${+m}/${+d}`; };
+    const m = AMT.modal({
+      title: 'CSVアップロード(宿泊者リスト)',
+      wide: true,
+      body: `<div class="imp">
+        <label class="impDrop"><i class="ti ti-file-upload"></i>
+          <span>①予約・②部屋割りのCSVを選択(ドラッグ&ドロップ可・2つ同時に選べます)</span>
+          <input type="file" accept=".csv,.CSV" multiple hidden></label>
+        <ul class="impFiles"></ul>
+        <div class="impResult"></div>
+      </div>`,
+      buttons: [{ label: 'キャンセル' }, {
+        label: '取り込む', primary: true, onClick: async () => {
+          const d = await AMT.api('/api/import/commit', { method: 'POST', body: { files } });
+          const s = d.summary;
+          AMT.toast(`取り込みました(夕食${s.dinner}件・朝食${s.breakfast}件・更新${s.update}件)`);
+          window.dispatchEvent(new CustomEvent('amt:imported'));
+        }
+      }]
+    });
+    const runBtn = m.querySelector('.modalFoot .primary');
+    const input = m.querySelector('input[type=file]');
+    const list = m.querySelector('.impFiles');
+    const result = m.querySelector('.impResult');
+    runBtn.disabled = true;
+
+    function renderFiles(info = []) {
+      list.innerHTML = files.map((f, i) => {
+        const k = info[i];
+        return `<li><i class="ti ti-file-text"></i><span class="impName">${AMT.esc(f.name)}</span>
+          ${k ? `<span class="impKind${k.kind ? '' : ' bad'}">${AMT.esc(k.kind_label)}${k.kind ? `(${k.rows}行)` : ''}</span>` : '<span class="muted">確認中…</span>'}
+          <button type="button" class="iconBtn" data-rm="${i}" aria-label="外す"><i class="ti ti-x"></i></button></li>`;
+      }).join('');
+    }
+    function renderResult(d) {
+      if (!d) { result.innerHTML = ''; return; }
+      if (!d.ready) {
+        result.innerHTML = `<p class="impWarn"><i class="ti ti-alert-triangle"></i>${d.missing.map(AMT.esc).join('・')}のファイルも選んでください。2つそろわないと取り込めません。</p>`;
+        return;
+      }
+      const s = d.summary;
+      const slots = s.dinner_by_slot.map(x => `${x.slot || '未定'} ${x.count}件`).join('・');
+      result.innerHTML = `<table class="impSum">
+          <tr><th>夕食(新規)</th><td><b>${s.dinner}</b>件${slots ? `<span class="muted">(${slots})</span>` : ''}</td></tr>
+          <tr><th>朝食(新規)</th><td><b>${s.breakfast}</b>件<span class="muted">(すべて時間未定)</span></td></tr>
+          <tr><th>取込済み</th><td>部屋番号・名前の更新 <b>${s.update}</b>件 / 変更なし ${s.unchanged}件${s.skipped_deleted ? ` / 削除済みのため対象外 ${s.skipped_deleted}件` : ''}</td></tr>
+          <tr><th>予約</th><td>${s.stays}件(取消 ${s.cancelled}件・夕食/朝食なし ${s.not_target}件${s.unassigned ? `・<span class="warnTxt">部屋未割当 ${s.unassigned}件</span>` : ''})</td></tr>
+        </table>
+        <p class="muted">人数は0で登録します。取込済みの予約は、時間・人数・アレルギー・備考を上書きしません。</p>
+        ${d.alerts.length ? `<div class="impAlerts"><h3><i class="ti ti-alert-triangle"></i>要確認(${d.alerts.length}件) — 自動では削除しません。管理表で確認してください</h3>
+          <ul>${d.alerts.map(a => `<li><a href="${a.link}" target="_blank" rel="noopener">${a.meal_label} ${a.dates.length > 1 ? `${md(a.dates[0])}〜${md(a.dates[a.dates.length - 1])}(${a.dates.length}日)` : md(a.dates[0])}
+            ${AMT.esc(a.room)} ${AMT.esc(a.guest_name)}</a> <span class="impReason">${AMT.esc(a.reason)}</span>${a.manual ? ' <span class="impManual">手入力あり</span>' : ''}</li>`).join('')}</ul></div>` : ''}`;
+    }
+    async function check() {
+      const my = ++seq;
+      runBtn.disabled = true;
+      renderFiles();
+      if (!files.length) { renderResult(null); return; }
+      try {
+        const d = await AMT.api('/api/import/preview', { method: 'POST', body: { files } });
+        if (my !== seq) return;
+        // 同じ種別を複数選んだときは、サーバーと同じく後から選んだものだけ残す
+        const lastOf = {};
+        d.files.forEach((f, i) => { if (f.kind) lastOf[f.kind] = i; });
+        const keep = d.files.map((f, i) => !f.kind || lastOf[f.kind] === i);
+        files = files.filter((_, i) => keep[i]);
+        renderFiles(d.files.filter((_, i) => keep[i]));
+        renderResult(d);
+        runBtn.disabled = !d.ready;
+      } catch (err) {
+        if (my === seq) { renderFiles(); result.innerHTML = `<p class="impWarn">${AMT.esc(err.message)}</p>`; }
+      }
+    }
+    async function add(fileList) {
+      const picked = [...fileList].filter(f => /\.csv$/i.test(f.name));
+      if (!picked.length) { AMT.toast('CSVファイルを選んでください', true); return; }
+      for (const f of picked) files.push({ name: f.name, data: await readB64(f) });
+      files = files.slice(-10);
+      check();
+    }
+    input.addEventListener('change', () => { add(input.files); input.value = ''; });
+    list.addEventListener('click', ev => {
+      const b = ev.target.closest('[data-rm]');
+      if (b) { files.splice(+b.dataset.rm, 1); check(); }
+    });
+    const drop = m.querySelector('.impDrop');
+    drop.addEventListener('dragover', ev => { ev.preventDefault(); drop.classList.add('over'); });
+    drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+    drop.addEventListener('drop', ev => { ev.preventDefault(); drop.classList.remove('over'); add(ev.dataTransfer.files); });
   });
 })();

@@ -16,13 +16,15 @@
   const today = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
   const dow = s => WEEK[new Date(s + 'T00:00:00').getDay()];
   const md = s => `${+s.slice(5, 7)}/${+s.slice(8, 10)}(${dow(s)})`;
+  // 複数部屋(「, 」区切り)は「115 他14室」
+  const roomText = room => { const rs = room.split(/\s*,\s*/).filter(Boolean); return rs.length > 1 ? `${rs[0]} 他${rs.length - 1}室` : room; };
   const dayHead = s => `${+s.slice(0, 4) === new Date().getFullYear() ? '' : s.slice(0, 4) + '年'}${+s.slice(5, 7)}月${+s.slice(8, 10)}日(${dow(s)})`;
 
   // ---------- 予約カード ----------
   function resCard(r, removable) {
     if (!r) return '';
     const body = `<i class="ti ${r.meal === 'dinner' ? 'ti-moon' : 'ti-sun'}"></i>
-      <span><b>${MEAL_LABEL[r.meal]} ${md(r.date)}</b> ${esc(r.room)} ${esc(r.guest_name)}${r.guest_name ? ' 様' : ''}
+      <span><b>${MEAL_LABEL[r.meal]} ${md(r.date)}</b> ${esc(roomText(r.room))} ${esc(r.guest_name)}${r.guest_name ? ' 様' : ''}
       <span class="muted">${r.time_slot || '時間未定'}${r.deleted ? '・削除済み' : ''}</span></span>`;
     return removable
       ? `<div class="resCard">${body}<button type="button" class="iconBtn" data-unattach aria-label="添付を外す"><i class="ti ti-x"></i></button></div>`
@@ -167,7 +169,7 @@
       const k = q.value.trim().toLowerCase();
       const shown = rows.filter(r => !k || [r.room, r.guest_name, r.allergy, r.note].join(' ').toLowerCase().includes(k));
       list.innerHTML = shown.length ? shown.map(r => `<button type="button" class="pickItem" data-id="${r.id}">
-          <b>${esc(r.room)}</b><span>${esc(r.guest_name)}</span><span class="muted">${r.time_slot || '時間未定'}</span>
+          <b title="${esc(r.room)}">${esc(roomText(r.room))}</b><span>${esc(r.guest_name)}</span><span class="muted">${r.time_slot || '時間未定'}</span>
           ${r.allergy ? `<span class="pickAllergy"><i class="ti ti-alert-triangle"></i>${esc(r.allergy)}</span>` : ''}
           ${r.note ? `<span class="pickNote"><i class="ti ti-note"></i>${esc(r.note)}</span>` : ''}</button>`).join('')
         : '<p class="empty">この日の予約はありません</p>';

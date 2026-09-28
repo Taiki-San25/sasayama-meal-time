@@ -1,3 +1,5 @@
+import base64
+import binascii
 import os
 import re
 import secrets
@@ -17,7 +19,8 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
-from db import (ADMIN_ROLES, ENTRY_ROLES, MEALS, ROLES, AuthLog, ChatMessage, ChatRead, Reservation, ReservationHistory, SessionLocal, TimeSlot,
+import importer
+from db import (ADMIN_ROLES, ENTRY_ROLES, IMPORT_ROLES, MEALS, ROLES, AuthLog, ChatMessage, ChatRead, Reservation, ReservationHistory, SessionLocal, TimeSlot,
                 User, init_db, now_jst)
 from security import hash_password, verify_password
 
@@ -223,7 +226,7 @@ class ReservationIn(BaseModel):
     """編集用(日付・泊数は変更しない)"""
     model_config = ConfigDict(str_strip_whitespace=True)
 
-    room: str = Field(min_length=1, max_length=32)
+    room: str = Field(min_length=1, max_length=255)
     guest_name: str = Field(default="", max_length=128)
     adults: int = Field(default=0, ge=0, le=99)
     children: int = Field(default=0, ge=0, le=99)
@@ -296,7 +299,7 @@ def record(db: Session, r: Reservation, user: User, action: str, changes: dict) 
                               changed_by=user.id))
 
 
-def change(db: Session, r: Reservation, values: dict, user: User) -> None:
+def change(db: Session, r: Reservation, values: dict, user: User, action: str = "update") -> None:
     """値を更新し、差分があれば履歴に残す(commit は呼び出し側)"""
     before = snapshot(r)
     for k, v in values.items():
@@ -304,7 +307,7 @@ def change(db: Session, r: Reservation, values: dict, user: User) -> None:
     after = snapshot(r)
     diff = {f: [before[f], after[f]] for f in TRACKED if before[f] != after[f]}
     if diff:
-        record(db, r, user, "update", diff)
+        record(db, r, user, action, diff)
 
 
 # ---------- グループ ----------
@@ -447,6 +450,156 @@ def reservation_history(meal: str, rid: int, _: User = Depends(current_user), db
                       .order_by(ReservationHistory.id.desc()))
     return [{"action": h.action, "changes": h.changes, "changed_at": iso(h.changed_at),
              "changed_by": names.get(h.changed_by, "")} for h in rows]
+
+
+# ---------- CSV取込(宿泊者リスト) ----------
+IMPORT_MAX_BYTES = 5 * 1024 * 1024
+MANUAL_ACTIONS = ("create", "update", "delete", "restore")  # CSV取込以外の操作
+KIND_LABELS = {"reservations": "①予約", "rooms": "②部屋割り"}
+
+
+class ImportFileIn(BaseModel):
+    name: str = Field(max_length=255)
+    data: str  # base64
+
+
+class ImportIn(BaseModel):
+    files: list[ImportFileIn] = Field(max_length=10)
+
+
+def import_user(user: User = Depends(current_user)) -> User:
+    if user.role not in IMPORT_ROLES:
+        raise HTTPException(403, "CSVの取り込み権限がありません")
+    return user
+
+
+def read_import_files(body: ImportIn) -> tuple[list[dict], dict[str, list[list[str]]]]:
+    """ファイルごとに種別を判定する。同じ種別が複数あれば後のファイルを使う"""
+    files, rows_by_kind = [], {}
+    for f in body.files:
+        try:
+            raw = base64.b64decode(f.data, validate=True)
+        except (binascii.Error, ValueError):
+            raise HTTPException(400, f"{f.name} を読み込めません")
+        if len(raw) > IMPORT_MAX_BYTES:
+            raise HTTPException(400, f"{f.name} が大きすぎます(5MBまで)")
+        try:
+            rows = importer.read_rows(raw)
+        except importer.CsvError as e:
+            raise HTTPException(400, f"{f.name}: {e}")
+        kind = importer.detect_kind(rows)
+        files.append({"name": f.name, "kind": kind, "kind_label": KIND_LABELS.get(kind, "判別できません"),
+                      "rows": len(rows)})
+        if kind:
+            rows_by_kind[kind] = rows
+    return files, rows_by_kind
+
+
+def import_plan(db: Session, stays: list[importer.Stay]) -> dict:
+    """取り込み内容を計算する(DBは変更しない)"""
+    keys = [s.key for s in stays]
+    existing = {}
+    for r in db.scalars(select(Reservation).where(Reservation.ext_key.in_(keys))) if keys else []:
+        existing[(r.meal, r.ext_key, r.date)] = r
+    creates, updates, alerts = [], [], []
+    unchanged = skipped_deleted = 0
+    seen = set()
+    for s in stays:
+        targets = {"dinner": s.dinner, "breakfast": s.breakfast}
+        for meal in MEALS:
+            wanted = [] if s.cancelled or not targets[meal] else s.dates(meal)
+            for i, d in enumerate(wanted):
+                seen.add((meal, s.key, d))
+                r = existing.get((meal, s.key, d))
+                values = {"room": s.room, "guest_name": s.name}
+                if r is None:
+                    creates.append((s, meal, d, i + 1, len(wanted)))
+                elif r.deleted_at is not None:
+                    skipped_deleted += 1  # 手で削除したものは作り直さない
+                elif any(getattr(r, k) != v for k, v in values.items()):
+                    updates.append((r, values))
+                else:
+                    unchanged += 1
+            # 取込済みだが、取消・対象外・日程外になったもの(自動では消さずに知らせる)
+            stale = [r for (m, k, d), r in existing.items()
+                     if m == meal and k == s.key and r.deleted_at is None and (m, k, d) not in seen]
+            if stale:
+                reason = ("取消になりました" if s.cancelled
+                          else f"{MEAL_LABELS[meal]}の対象外になりました" if not targets[meal]
+                          else "日程から外れました")
+                stale.sort(key=lambda r: r.date)
+                manual = set(db.scalars(select(ReservationHistory.reservation_id).where(
+                    ReservationHistory.reservation_id.in_([r.id for r in stale]),
+                    ReservationHistory.action.in_(MANUAL_ACTIONS))))
+                alerts.append({
+                    "key": s.key, "meal": meal, "meal_label": MEAL_LABELS[meal], "reason": reason,
+                    "room": stale[0].room, "guest_name": stale[0].guest_name,
+                    "dates": [r.date.isoformat() for r in stale], "manual": bool(manual),
+                    "link": f"/{meal}?d={stale[0].date.isoformat()}&hl={stale[0].id}",
+                })
+    by_slot = {}
+    for s, meal, *_ in creates:
+        if meal == "dinner":
+            by_slot[s.dinner_time or ""] = by_slot.get(s.dinner_time or "", 0) + 1
+    return {
+        "creates": creates, "updates": updates, "alerts": alerts,
+        "summary": {
+            "stays": len(stays),
+            "cancelled": sum(s.cancelled for s in stays),
+            "not_target": sum(not s.cancelled and not (s.dinner or s.breakfast) for s in stays),
+            "unassigned": sum(not s.cancelled and (s.dinner or s.breakfast) and not s.rooms for s in stays),
+            "dinner": sum(m == "dinner" for _, m, *_ in creates),
+            "dinner_by_slot": [{"slot": k, "count": v}
+                               for k, v in sorted(by_slot.items(), key=lambda x: x[0] or "99")],
+            "breakfast": sum(m == "breakfast" for _, m, *_ in creates),
+            "update": len(updates), "unchanged": unchanged, "skipped_deleted": skipped_deleted,
+        },
+    }
+
+
+def prepare_import(body: ImportIn, db: Session) -> tuple[list[dict], dict | None]:
+    files, rows = read_import_files(body)
+    if not ("reservations" in rows and "rooms" in rows):
+        return files, None
+    try:
+        stays = importer.build_stays(rows["reservations"], rows["rooms"])
+    except importer.CsvError as e:
+        raise HTTPException(400, str(e))
+    return files, import_plan(db, stays)
+
+
+def import_response(files: list[dict], plan: dict | None) -> dict:
+    kinds = {f["kind"] for f in files}
+    return {"files": files, "ready": plan is not None,
+            "missing": [label for kind, label in KIND_LABELS.items() if kind not in kinds],
+            "summary": plan["summary"] if plan else None, "alerts": plan["alerts"] if plan else []}
+
+
+@app.post("/api/import/preview")
+def import_preview(body: ImportIn, _: User = Depends(import_user), db: Session = Depends(get_db)):
+    return import_response(*prepare_import(body, db))
+
+
+@app.post("/api/import/commit")
+def import_commit(body: ImportIn, user: User = Depends(import_user), db: Session = Depends(get_db)):
+    files, plan = prepare_import(body, db)
+    if plan is None:
+        raise HTTPException(400, "①予約と②部屋割りの2つのファイルがそろっていないため、取り込みを中止しました")
+    now = now_jst()
+    stay_ids = {}
+    for s, meal, d, night_no, nights in plan["creates"]:
+        stay_id = stay_ids.setdefault((s.key, meal), uuid.uuid4().hex) if nights > 1 else None
+        r = Reservation(meal=meal, date=d, nights=nights, night_no=night_no, stay_id=stay_id, ext_key=s.key,
+                        room=s.room, guest_name=s.name, adults=0, children=0, infants=0,
+                        time_slot=s.dinner_time if meal == "dinner" else None, allergy="", note="",
+                        created_at=now, created_by=user.id, updated_at=now, updated_by=user.id)
+        db.add(r)
+        db.flush()
+        record(db, r, user, "import", {f: [None, v] for f, v in snapshot(r).items()})
+    for r, values in plan["updates"]:
+        change(db, r, values, user, action="import_update")
+    db.commit()
+    return import_response(files, plan)
 
 
 # ---------- ユーザー管理 ----------
@@ -726,7 +879,8 @@ FIELD_LABELS = {
     "guest_name": "代表者名", "adults": "大人", "children": "子供", "infants": "幼児",
     "allergy": "アレルギー", "note": "備考", "group_id": "グループ", "entered_at": "ステータス",
 }
-RES_ACTIONS = {"create": "登録", "update": "変更", "delete": "削除", "restore": "復元"}
+RES_ACTIONS = {"create": "登録", "update": "変更", "delete": "削除", "restore": "復元",
+               "import": "CSV取込", "import_update": "CSV取込(更新)"}
 AUTH_ACTIONS = {"login": "ログイン", "login_failed": "ログイン失敗", "logout": "ログアウト",
                 "password_change": "パスワード変更"}
 LOG_MAX_DAYS = 93
@@ -743,7 +897,7 @@ def fmt_value(field: str, v) -> str:
 
 
 def change_detail(action: str, changes: dict) -> str:
-    if action == "create":  # 登録時は入力された項目だけ
+    if action in ("create", "import"):  # 登録時は入力された項目だけ
         return "、".join(f"{FIELD_LABELS.get(f, f)} {fmt_value(f, b)}" for f, (_, b) in changes.items()
                         if b not in (None, "", 0) and f not in ("date", "nights", "night_no", "room", "guest_name"))
     return "、".join(f"{FIELD_LABELS.get(f, f)}: {fmt_value(f, a)} → {fmt_value(f, b)}" for f, (a, b) in changes.items())

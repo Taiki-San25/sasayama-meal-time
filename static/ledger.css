@@ -139,3 +139,5 @@ body.dayFuture{background:rgba(227,238,250,.5)}
   table.grid th,table.grid td{padding:4px 6px}
   table.grid tr{break-inside:avoid}
 }
+.multiRoom{cursor:help;white-space:nowrap}
+.multiRoom small{font-weight:400;color:#777;font-size:11px}

@@ -190,3 +190,30 @@ table.grid td.num,table.grid th.num{text-align:right;font-variant-numeric:tabula
   .tableWrap{overflow:visible;border:none}
   table.grid th{position:static}
 }
+/* CSVアップロード */
+.pillBtn[hidden]{display:none}
+.imp{display:grid;gap:12px}
+.impDrop{display:flex;align-items:center;gap:10px;padding:18px;border:2px dashed #b5c7da;border-radius:10px;
+  background:#f7fbff;color:#185fa5;font-size:13px;cursor:pointer}
+.impDrop i{font-size:24px}
+.impDrop.over{background:#e6f1fb;border-color:#185fa5}
+.impFiles{list-style:none;margin:0;padding:0;display:grid;gap:4px}
+.impFiles:empty{display:none}
+.impFiles li{display:flex;align-items:center;gap:8px;font-size:13px;padding:4px 8px;background:#f5f5f5;border-radius:6px}
+.impFiles .impName{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.impKind{font-size:12px;padding:2px 8px;border-radius:999px;background:#e6f4ea;color:#2e7d32;white-space:nowrap}
+.impKind.bad{background:#fdecea;color:#c0392b}
+.impWarn{display:flex;align-items:center;gap:6px;margin:0;color:#a55a00;font-size:13px}
+.impSum{border-collapse:collapse;font-size:13px;width:100%}
+.impSum th{text-align:left;font-weight:500;color:#555;padding:6px 12px 6px 0;white-space:nowrap;vertical-align:top;width:1%}
+.impSum td{padding:6px 0;border-bottom:1px solid #f0f0f0}
+.impSum b{font-size:16px;margin-right:2px}
+.impSum .muted{margin-left:6px}
+.warnTxt{color:#c0392b}
+.impResult > p.muted{margin:8px 0;font-size:12px}
+.impResult{display:grid;gap:4px}
+.impAlerts{border:1px solid #f0c36d;background:#fff9ec;border-radius:8px;padding:10px 12px}
+.impAlerts h3{display:flex;align-items:center;gap:6px;margin:0 0 6px;font-size:13px;color:#a55a00}
+.impAlerts ul{margin:0;padding-left:18px;font-size:13px;display:grid;gap:3px;max-height:220px;overflow:auto}
+.impReason{color:#c0392b;font-size:12px}
+.impManual{font-size:11px;padding:1px 6px;border-radius:999px;background:#fdecea;color:#c0392b}

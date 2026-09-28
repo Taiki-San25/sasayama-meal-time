@@ -113,7 +113,16 @@
   const FIELD_LABELS = { date: '日付', time_slot: '時間', room: '部屋', guest_name: '代表者名', adults: '大人',
     children: '子供', infants: '幼児', nights: '泊数', night_no: '何泊目', group_id: 'グループ', entered_at: 'ステータス', allergy: 'アレルギー', note: '備考' };
   const nightsLabel = r => `${r.night_no}泊/${r.nights}泊`;
-  const ACTION_LABELS = { create: '登録', update: '変更', delete: '削除', restore: '復元' };
+  const ACTION_LABELS = { create: '登録', update: '変更', delete: '削除', restore: '復元', import: 'CSV取込', import_update: 'CSV取込(更新)' };
+  // 複数部屋(「, 」区切り)は「115 他14室」と表示し、ホバーで全室
+  const splitRooms = room => room.split(/\s*,\s*/).filter(Boolean);
+  const roomText = room => { const rs = splitRooms(room); return rs.length > 1 ? `${rs[0]} 他${rs.length - 1}室` : room; };
+  const roomLabel = room => {
+    const rooms = splitRooms(room);
+    return rooms.length > 1
+      ? `<span class="multiRoom" title="${esc(rooms.join(', '))}">${esc(rooms[0])} <small>他${rooms.length - 1}室</small></span>`
+      : esc(room);
+  };
   const fmtVal = (f, v) => f === 'time_slot' ? (v || '未定')
     : f === 'group_id' ? (v ? 'あり' : 'なし')
     : f === 'entered_at' ? (v ? `入場済(${fmtTs(v)})` : '空白')
@@ -216,7 +225,7 @@
           : `<select class="slotSel" aria-label="時間">${slotOptions(r.time_slot)}</select>
           <span class="printOnly">${r.time_slot || '未定'}</span>`}</td>
         <td class="status">${statusCell(r)}</td>
-        <td class="room">${esc(r.room)}${groupTag(groups[r.group_id])}</td>
+        <td class="room">${roomLabel(r.room)}${groupTag(groups[r.group_id])}</td>
         <td class="guest">${esc(r.guest_name)}</td>
         <td class="nights">${nightsLabel(r)}</td>
         <td class="num">${r.adults}</td><td class="num">${r.children}</td><td class="num">${r.infants}</td>
@@ -270,7 +279,7 @@
           </div>` : '<p class="muted groupNote">この日に紐づけられる他の予約がありません。</p>'}
         </div>`;
     const m = modal({
-      title: isNew ? '予約を追加' : `予約を編集(${r.room})`,
+      title: isNew ? '予約を追加' : `予約を編集(${roomText(r.room)})`,
       wide: true,
       body: `<form class="form">
         <p class="formDate"><i class="ti ti-calendar"></i>${dateLabel(r.date)}${isNew
@@ -282,7 +291,7 @@
         </div>
         ${isNew ? '<p class="muted nightsHint" style="margin:-4px 0 0;font-size:12px"></p>' : ''}
         <div class="row">
-          <label>部屋番号<input type="text" name="room" value="${esc(r.room)}" required maxlength="32"></label>
+          <label>部屋番号<input type="text" name="room" value="${esc(r.room)}" required maxlength="255"></label>
           <label>代表者名<input type="text" name="guest_name" value="${esc(r.guest_name)}" maxlength="128"></label>
         </div>
         <div class="row">
@@ -381,7 +390,7 @@
   function openDeleted(r) {
     const item = (label, v) => `<div class="roItem"><span>${label}</span><div>${esc(v) || '<span class="muted">-</span>'}</div></div>`;
     const m = modal({
-      title: `削除済みの予約(${r.room})`,
+      title: `削除済みの予約(${roomText(r.room)})`,
       wide: true,
       body: `<div class="readonly">
         ${item('日付', r.date.replace(/-/g, '/'))}${item('時間', r.time_slot || '未定')}
@@ -418,7 +427,7 @@
   async function confirmDelete(r, parent) {
     const ok = await confirmDialog({
       title: '予約を削除',
-      message: `${esc(r.room)} ${esc(r.guest_name)} 様の予約を削除します。よろしいですか？`,
+      message: `${esc(roomText(r.room))} ${esc(r.guest_name)} 様の予約を削除します。よろしいですか？`,
       note: '削除した予約は「削除済みも表示」から閲覧・復元できます。',
       ok: '削除する', danger: true,
     });
@@ -457,7 +466,7 @@
     try {
       const updated = await api(`/api/${MEAL}/reservations/${id}/time`, { method: 'PATCH', body: { time_slot: e.target.value || null } });
       state.rows = state.rows.map(r => r.id === id ? updated : r);
-      toast(`${updated.room} を ${updated.time_slot || '未定'} に変更しました`);
+      toast(`${roomText(updated.room)} を ${updated.time_slot || '未定'} に変更しました`);
     } catch (err) { /* toast 済み */ }
     render();
   });
@@ -467,7 +476,7 @@
     const entered = cb.checked;
     cb.checked = !entered;  // 確認で「はい」を押すまで戻しておく
     const r = state.rows.find(x => x.id === +cb.closest('tr').dataset.id);
-    const who = `${esc(r.room)} ${esc(r.guest_name)}${r.guest_name ? ' 様' : ''}`;
+    const who = `${esc(roomText(r.room))} ${esc(r.guest_name)}${r.guest_name ? ' 様' : ''}`;
     const ok = await confirmDialog(entered
       ? { title: '入場済にする', message: `${who}を入場済にしますか？`, ok: 'はい', cancel: 'いいえ' }
       : { title: '入場済を取り消す', message: `${who}の入場済を取り消しますか？`, ok: 'はい', cancel: 'いいえ' });
@@ -475,7 +484,7 @@
     try {
       const updated = await api(`/api/${MEAL}/reservations/${r.id}/entered`, { method: 'PATCH', body: { entered } });
       state.rows = state.rows.map(x => x.id === r.id ? updated : x);
-      toast(entered ? `${r.room} を入場済にしました` : `${r.room} の入場済を取り消しました`);
+      toast(entered ? `${roomText(r.room)} を入場済にしました` : `${roomText(r.room)} の入場済を取り消しました`);
     } catch (err) { /* toast 済み */ }
     render();
   });
@@ -491,6 +500,7 @@
     loadRows().catch(() => {});
   }, REFRESH_MS);
   document.addEventListener('visibilitychange', () => { if (!document.hidden && !AMT.isModalOpen()) loadRows().catch(() => {}); });
+  window.addEventListener('amt:imported', () => loadRows().catch(() => {}));
 
   // チャットの予約カードから来た場合(?hl=予約ID)は該当行を強調
   async function highlight(id) {
