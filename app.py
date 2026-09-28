@@ -816,7 +816,7 @@ def summarize(db: Session, meal: str, start: date, end: date) -> dict:
         a["groups"] += 1
         for k in SUMMED:
             a[k] += getattr(r, k)
-        a["total"] += r.adults + r.children + r.infants
+        a["total"] += r.adults + r.children  # 席のみは計に含めない
         a["entered"] += r.entered_at is not None
     total = {k: sum(a[k] for a in days.values()) for k, _ in SUMMARY_COLS}
     return {

@@ -5,7 +5,7 @@
   const { esc, api, toast, modal } = AMT;
   const REFRESH_MS = 30000;
   const UNSET = '';  // 時間未定
-  const MAX_COUNT = 6;  // フォームで選べる人数の上限
+  const MAX_COUNT = 99;  // 人数の上限(サーバー側と同じ)
   const ENTRY_ROLES = ['restaurant', 'developer'];  // 入場済を操作できるロール(サーバー側と同じ)
 
   const pad = n => String(n).padStart(2, '0');
@@ -26,7 +26,7 @@
     { key: 'adults', label: '大人', num: true, val: r => r.adults },
     { key: 'children', label: '幼児', num: true, val: r => r.children },
     { key: 'infants', label: '席のみ', num: true, val: r => r.infants },
-    { key: 'total', label: '計', num: true, val: r => r.adults + r.children + r.infants },
+    { key: 'total', label: '計', num: true, val: r => total(r) },
     { key: 'allergy', label: 'アレルギー', val: byText('allergy') },
     { key: 'note', label: '備考', val: byText('note') },
     { key: 'updated', label: '更新', cls: 'noPrint', firstDir: -1, val: r => (r.deleted ? r.deleted_at : r.updated_at) || '' },
@@ -102,7 +102,7 @@
   }
 
   // ---------- 描画 ----------
-  const total = r => r.adults + r.children + r.infants;
+  const total = r => r.adults + r.children;  // 席のみは計に含めない
   const active = () => state.rows.filter(r => !r.deleted);
   // "2026-09-24T18:05:12" → "9/24 18:05"(今年以外は年も表示)
   const fmtTs = ts => {
@@ -189,7 +189,7 @@
     if (agg[UNSET]) keys.push(UNSET);
     const card = (label, a, cls = '') => {
       a = a || { n: 0, adults: 0, children: 0, infants: 0 };
-      const t = a.adults + a.children + a.infants;
+      const t = total(a);
       return `<div class="sumCard ${cls}${a.n ? '' : ' zero'}">
         <div class="sumLabel">${esc(label)}</div>
         <div class="sumMain"><b>${t}</b>名 <span>${a.n}組</span></div>
@@ -256,12 +256,9 @@
     if (r && r.deleted) return openDeleted(r);
     r = r || { date: state.date, nights: 1, room: '', guest_name: '', adults: 2, children: 0, infants: 0, time_slot: null, allergy: '', note: '' };
     const dateLabel = d => `${d.replace(/-/g, '/')}(${dow(d)})`;
-    // 人数は 0〜MAX_COUNT のプルダウン(既存データが上限超えなら、その値も選択肢に残す)
-    const countSelect = (name, v, extra = '') => {
-      const vals = [...Array(MAX_COUNT + 1).keys()];
-      if (v > MAX_COUNT) vals.push(v);
-      return `<select name="${name}"${extra}>${vals.map(n => `<option value="${n}"${n === v ? ' selected' : ''}>${n}</option>`).join('')}</select>`;
-    };
+    // 人数は 0〜MAX_COUNT の整数を自由入力
+    const countInput = (name, v) =>
+      `<input type="number" name="${name}" value="${v}" min="0" max="${MAX_COUNT}" step="1" required inputmode="numeric">`;
     const groups = groupInfo();
     const myGroup = groups[r.group_id];
     const candidates = active().filter(x => x.id !== r.id)
@@ -297,9 +294,9 @@
           <label>代表者名<input type="text" name="guest_name" value="${esc(r.guest_name)}" maxlength="128"></label>
         </div>
         <div class="row">
-          <label>大人${countSelect('adults', r.adults)}</label>
-          <label>幼児${countSelect('children', r.children)}</label>
-          <label>席のみ${countSelect('infants', r.infants)}</label>
+          <label>大人${countInput('adults', r.adults)}</label>
+          <label>幼児${countInput('children', r.children)}</label>
+          <label>席のみ${countInput('infants', r.infants)}</label>
         </div>
         <label>アレルギー<textarea name="allergy" maxlength="2000">${esc(r.allergy)}</textarea></label>
         <label>備考<textarea name="note" maxlength="2000">${esc(r.note)}</textarea></label>
