@@ -32,9 +32,7 @@
     <path class="wall" d="M42 30 H640 V430 H42 Z"/>
     <path class="wall" d="M662 30 H998 V270 H662 Z"/>
     <path class="fixture" d="M168 34 H578 V114 H548 V64 H198 V114 H168 Z"/>
-    <rect class="fixture" x="204" y="152" width="332" height="68" rx="4"/>
-    <text class="label" x="370" y="188">四季の蔵</text>
-    <text class="label small" x="373" y="54">カウンター</text>`;
+    <rect class="fixture" x="204" y="152" width="332" height="68" rx="4"/>`;
 
   root.innerHTML = `
     <div class="flBar noPrint">
@@ -128,6 +126,7 @@
       <div class="rcSub">大${r.adults} 幼${r.children} 席${r.infants}
         ${r.allergy ? `<span class="rcAllergy" title="${esc(r.allergy)}"><i class="ti ti-alert-triangle"></i>アレルギー</span>` : ''}
         ${r.entered_at ? '<span class="rcEntered">入場済</span>' : ''}
+        ${r.adults ? '' : '<span class="rcNoCount" title="大人が0人です。夕食時間管理表で人数を入力してください">人数未入力</span>'}
         ${tbl.length ? `<span class="rcTables"><i class="ti ti-armchair"></i>${tbl.map(esc).join('・')}</span>` : ''}</div>
     </div>`;
   }
@@ -177,21 +176,23 @@
     map.innerHTML = WALLS + currentTables().map(t => {
       const o = loads[t.id];
       const rs = o ? o.rs : [];
+      const noCount = rs.filter(r => !r.adults).length;  // 大人0 = 人数未入力(席数超過を判定できない)
       const allIn = rs.length && rs.every(r => r.entered_at), someIn = rs.some(r => r.entered_at);
       const over = o && people(o) > t.seats;
       const cls = ['tbl', rs.length ? 'busy' : 'free', allIn ? 'entered' : someIn ? 'partEntered' : '', over ? 'full' : '',
         t.parts ? 'merged' : '', sel.has(t.id) ? 'picked' : '', state.moveFrom && state.moveFrom.table === t.id ? 'moving' : '',
-        rs.some(r => r.id === state.selected) ? 'mine' : ''].filter(Boolean).join(' ');
+        rs.some(r => r.id === state.selected) ? 'mine' : '', noCount ? 'noCount' : ''].filter(Boolean).join(' ');
       const rooms = rs.map(r => roomShort(r.room)).join('・');
       const allergy = rs.some(r => r.allergy);
-      const label = `卓${t.name} ${t.seats}名` + (rs.length ? ` ${rs.map(r => r.room).join('、')} 大人${o.adults} 幼児${o.children} 席のみ${o.infants}${allergy ? ' アレルギーあり' : ''}${allIn ? ' 入場済' : ''}` : ' 空き');
+      const label = `卓${t.name} ${t.seats}名` + (rs.length ? ` ${rs.map(r => r.room).join('、')} 大人${o.adults} 幼児${o.children} 席のみ${o.infants}${allergy ? ' アレルギーあり' : ''}${allIn ? ' 入場済' : ''}${noCount ? ` 人数未入力${noCount}組` : ''}` : ' 空き');
       return `<g class="${cls}" data-table="${t.id}" tabindex="0" role="button" aria-label="${esc(label)}">
         <title>${esc(label)}</title>
         <rect x="${t.x}" y="${t.y}" width="${t.w}" height="${t.h}" rx="6"/>
         <text class="tName" x="${t.x + 5}" y="${t.y + 14}">${esc(t.name)}${allIn ? '<tspan class="tIn"> ✓</tspan>' : someIn ? '<tspan class="tIn"> (✓)</tspan>' : ''}</text>
         <text class="tSeats" x="${t.x + t.w - 4}" y="${t.y + 14}">${t.seats}名</text>
         ${rs.length ? `<text class="tRoom" x="${t.x + t.w / 2}" y="${t.y + 33}">${esc(fit(rooms, t.w))}</text>
-        <text class="tPeople" x="${t.x + t.w / 2}" y="${t.y + 50}">${allergy ? '⚠' : ''}大${o.adults}幼${o.children}席${o.infants}</text>` : ''}
+        <text class="tPeople" x="${t.x + t.w / 2}" y="${t.y + 50}">${allergy ? '⚠' : ''}${noCount === rs.length ? '人数未入力'
+          : `大${o.adults}幼${o.children}席${o.infants}${noCount ? '+未' : ''}`}</text>` : ''}
       </g>`;
     }).join('') + (state.edit && state.edit.guides ? state.edit.guides.map(g =>
       `<line class="guide" x1="${g.x1}" y1="${g.y1}" x2="${g.x2}" y2="${g.y2}"/>`).join('') : '');
@@ -199,7 +200,7 @@
       ? '卓をタップで選択(複数可)、ドラッグで移動(他の卓と端・中心が揃うと赤い線が出て吸着、Altキーを押しながらで吸着なし)。選んだ卓は矢印キーで微調整、複数選ぶと「揃える」「等間隔」が使えます。'
       : state.moveFrom ? '移動先の卓をタップしてください(もう一度同じ卓で取り消し)。'
       : state.selected ? '割り当てる卓をタップしてください(割り当て済みの卓なら相席になります)。'
-      : '予約を選んでから卓をタップ、またはドラッグ&ドロップで割り当てます。割り当て済みの卓をタップすると外す・移動ができます。人数(大人+幼児+席のみ)が席数を超えると赤字になります。';
+      : '予約を選んでから卓をタップ、またはドラッグ&ドロップで割り当てます。割り当て済みの卓をタップすると外す・移動ができます。人数(大人+幼児+席のみ)が席数を超えると赤字になります。「人数未入力」「+未」は大人0人の予約です(席数超過を判定できません)。';
     $('flHint').textContent = hint;
   }
 

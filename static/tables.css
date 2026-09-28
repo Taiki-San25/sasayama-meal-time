@@ -99,3 +99,7 @@ body.dragging,body.dragging *{cursor:grabbing !important}
   .flHint{display:none}
   .tbl rect{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 }
+/* 人数未入力(大人0) */
+.rcNoCount{display:inline-block;font-size:11px;padding:0 6px;border-radius:999px;background:#faeeda;color:#854f0b;border:1px solid #ef9f27}
+.tbl.noCount .tPeople{fill:#a55a00;font-weight:700}
+.tbl.full.noCount .tPeople{fill:#c0392b}
