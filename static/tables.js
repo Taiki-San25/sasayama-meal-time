@@ -193,6 +193,15 @@
   const people = o => o.adults + o.children + o.infants;  // 席を使う人数(席のみも含む)
   const fit = (text, w) => { const max = Math.max(3, Math.floor((w - 8) / 7.5)); return text.length > max ? text.slice(0, max - 1) + '…' : text; };
 
+  // 卓の上に卓メモの冒頭5文字(相席で複数あれば「他」を付ける)。全文はホバー/卓のモーダルで
+  function memoTag(t) {
+    if (state.edit) return '';
+    const memos = slotAssign().filter(a => a.table_id === t.id && a.memo).map(a => a.memo.replace(/\s+/g, ' ').trim());
+    if (!memos.length) return '';
+    const head = [...memos[0]].slice(0, 5).join('');
+    return `<text class="tMemo" x="${t.x + t.w / 2}" y="${t.y - 4}"><title>${esc(memos.join(' / '))}</title>📝${esc(head)}${memos.length > 1 ? ' 他' : ''}</text>`;
+  }
+
   function renderMap() {
     const loads = state.edit ? {} : tableLoads();
     const sel = state.edit ? state.edit.sel : new Set();
@@ -211,7 +220,7 @@
       return `<g class="${cls}" data-table="${t.id}" tabindex="0" role="button" aria-label="${esc(label)}">
         <title>${esc(label)}</title>
         <rect x="${t.x}" y="${t.y}" width="${t.w}" height="${t.h}" rx="6"/>
-        ${!state.edit && slotAssign().some(a => a.table_id === t.id && a.memo) ? `<text class="tMemo" x="${t.x + t.w / 2}" y="${t.y - 4}">メモあり</text>` : ''}
+        ${memoTag(t)}
         <text class="tName" x="${t.x + 5}" y="${t.y + 14}">${esc(t.name)}${allIn ? '<tspan class="tIn"> ✓</tspan>' : someIn ? '<tspan class="tIn"> (✓)</tspan>' : ''}</text>
         <text class="tSeats" x="${t.x + t.w - 4}" y="${t.y + 14}">${t.seats}名</text>
         ${rs.length ? `<text class="tRoom" x="${t.x + t.w / 2}" y="${t.y + 33}">${esc(fit(rooms, t.w))}</text>
