@@ -504,11 +504,14 @@ def import_plan(db: Session, stays: list[importer.Stay]) -> dict:
     creates, updates, alerts = [], [], []
     unchanged = skipped_deleted = 0
     seen = set()
+    today = now_jst().date()  # 過去の日付は登録も要確認もしない(長期滞在の過去分など)
     for s in stays:
         targets = {"dinner": s.dinner, "breakfast": s.breakfast}
         for meal in MEALS:
             wanted = [] if s.cancelled or not targets[meal] else s.dates(meal)
             for i, d in enumerate(wanted):
+                if d < today:
+                    continue  # 何泊目・泊数は滞在全体で数える
                 seen.add((meal, s.key, d))
                 r = existing.get((meal, s.key, d))
                 values = {"room": s.room, "guest_name": s.name}
@@ -522,7 +525,7 @@ def import_plan(db: Session, stays: list[importer.Stay]) -> dict:
                     unchanged += 1
             # 取込済みだが、取消・対象外・日程外になったもの(自動では消さずに知らせる)
             stale = [r for (m, k, d), r in existing.items()
-                     if m == meal and k == s.key and r.deleted_at is None and (m, k, d) not in seen]
+                     if m == meal and k == s.key and r.deleted_at is None and d >= today and (m, k, d) not in seen]
             if stale:
                 reason = ("取消になりました" if s.cancelled
                           else f"{MEAL_LABELS[meal]}の対象外になりました" if not targets[meal]
