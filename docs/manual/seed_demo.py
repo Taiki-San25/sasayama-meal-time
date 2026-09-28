@@ -51,21 +51,32 @@ res = [  # 予約番号, 枝番, チェックイン, チェックアウト, 名�
 rooms = [("50101", "0", "0205"), ("50102", "0", "0301"), ("50103", "0", "0207"), ("50104", "0", "0112"),
          ("50105", "0", "0302"), ("50106", "0", "0303"), ("50107", "0", "0210"), ("50107", "0", "0211"),
          ("50107", "0", "0212")]
-f1 = "\r\n".join(",".join([n, b, "T", "2", ymd(i), ymd(o), str((o - i).days), "2", "", " ", name,
-                           "1" if c else "0", c, "現金"]) for n, b, i, o, name, c in res) + "\r\n"
-f2 = "\r\n".join(",".join([n, b, "T", ymd(TODAY), "0", str(k), "0", "2", "913", "x", room, "x"])
-                 for k, (n, b, room) in enumerate(rooms)) + "\r\n"
+def csv1(res):
+    return "\r\n".join(",".join([n, b, "T", "2", ymd(i), ymd(o), str((o - i).days), "2", "", " ", name,
+                                  "1" if c else "0", c, "現金"]) for n, b, i, o, name, c in res) + "\r\n"
+
+
+def csv2(rooms):
+    return "\r\n".join(",".join([n, b, "T", ymd(TODAY), "0", str(k), "0", "2", "913", "x", room, "x"])
+                       for k, (n, b, room) in enumerate(rooms)) + "\r\n"
+
+
+f1, f2 = csv1(res), csv2(rooms)
 files = {"files": [{"name": "予約ファイル①.CSV", "data": base64.b64encode(f1.encode("cp932")).decode()},
                    {"name": "予約ファイル②.CSV", "data": base64.b64encode(f2.encode("cp932")).decode()}]}
 call(front, "POST", "/api/import/commit", files)
+# アップロード画面の写真用: 新しい予約2件と、取消になった予約1件(要確認に出る)を含むファイル
+res_new = [x if x[0] != "50106" else (*x[:5], "取消") for x in res] + [
+    ("50109", "0", ci, co1, "ｷﾑﾗｱｵｲ_DNBF⑰", ""), ("50110", "0", ci, co1, "ﾊﾔｼﾘｮｳ_JBF", "")]
+rooms_new = rooms + [("50109", "0", "0305"), ("50110", "0", "0118")]
 with open("demo_予約ファイル①.CSV", "wb") as f:
-    f.write(f1.encode("cp932"))
+    f.write(csv1(res_new).encode("cp932"))
 with open("demo_予約ファイル②.CSV", "wb") as f:
-    f.write(f2.encode("cp932"))
+    f.write(csv2(rooms_new).encode("cp932"))
 
 # ---- 人数・アレルギーなど(一部は人数未入力のまま) ----
 rows = {r["resv_no"]: r for r in call(front, "GET", f"/api/dinner/reservations?d={D}")}
-counts = {"50101": (2, 0, 0), "50102": (2, 1, 0), "50103": (3, 1, 1), "50106": (2, 0, 0), "50107": (8, 1, 0)}
+counts = {"50101": (2, 0, 0), "50102": (2, 1, 0), "50103": (3, 1, 1), "50106": (2, 0, 0), "50107": (10, 1, 0)}
 for no, (a, c, i) in counts.items():
     call(front, "PATCH", f"/api/dinner/reservations/{rows[no]['id']}/counts", {"adults": a, "children": c, "infants": i})
 r = rows["50102"]
@@ -78,16 +89,35 @@ call(front, "PUT", f"/api/dinner/reservations/{r['id']}", {"room": r["room"], "g
 call(front, "POST", "/api/dinner/reservations", {"date": D, "nights": 1, "room": "外来", "guest_name": "中村 様", "adults": 2,
                                                   "children": 0, "infants": 0, "time_slot": "18:00", "allergy": "", "note": "電話予約"})
 
-# ---- 入場済・テーブル割り当て・卓メモ ----
-call(rest, "PATCH", f"/api/dinner/reservations/{rows['50101']['id']}/entered", {"entered": True})
+# グループ(ﾔﾏﾓﾄ様とﾜﾀﾅﾍﾞ様)
+r = rows["50106"]
+call(front, "PUT", f"/api/dinner/reservations/{r['id']}", {"room": r["room"], "guest_name": r["guest_name"], "adults": 2,
+     "children": 0, "infants": 0, "time_slot": r["time_slot"], "allergy": "", "note": "", "grouped": True,
+     "group_with": rows["50101"]["id"]})
+
+# ---- 入場済(17:30は一部、19:30は全員) ----
+for no in ("50101", "50102", "50107"):
+    call(rest, "PATCH", f"/api/dinner/reservations/{rows[no]['id']}/entered", {"entered": True})
+
+# ---- テーブル割り当て・卓メモ ----
 A = lambda rid, t, slot: call(rest, "POST", "/api/floor/assign", {"date": D, "time_slot": slot, "table_id": t, "reservation_id": rid})
 A(rows["50101"]["id"], "t7", "17:30")
-A(rows["50103"]["id"], "t18", "17:30")
+A(rows["50103"]["id"], "t8", "17:30")   # 5名を4名卓へ → 4名が座り、残り1名は未アサインに
 A(rows["50102"]["id"], "t8", "19:30")
-A(rows["50107"]["id"], "t1", "19:30")   # 9名のツアーを4名卓へ → 残り5名
-A(rows["50107"]["id"], "t2", "19:30")   # さらに4名 → 残り1名
-call(rest, "PUT", "/api/floor/memo", {"date": D, "time_slot": "17:30", "table_id": "t18", "reservation_id": rows["50103"]["id"],
+A(rows["50107"]["id"], "t1", "19:30")   # 11名のツアー → 卓1・2・3に4・4・3名
+A(rows["50107"]["id"], "t2", "19:30")
+A(rows["50107"]["id"], "t3", "19:30")
+call(rest, "PUT", "/api/floor/memo", {"date": D, "time_slot": "17:30", "table_id": "t8", "reservation_id": rows["50103"]["id"],
                                       "memo": "お子様用の椅子を1脚"})
+
+# ---- 朝食(翌朝): 人数と入場(一部入場を含む) ----
+D1 = (TODAY + datetime.timedelta(days=1)).isoformat()
+bf = {r["resv_no"]: r for r in call(front, "GET", f"/api/breakfast/reservations?d={D1}")}
+for no, (a, c, i) in {"50101": (2, 0, 0), "50102": (2, 1, 0), "50103": (3, 1, 1), "50104": (1, 0, 0),
+                      "50106": (2, 0, 0), "50107": (10, 1, 0)}.items():
+    call(front, "PATCH", f"/api/breakfast/reservations/{bf[no]['id']}/counts", {"adults": a, "children": c, "infants": i})
+for no, n in {"50101": 2, "50103": 3, "50107": 6}.items():
+    call(rest, "PATCH", f"/api/breakfast/reservations/{bf[no]['id']}/entered_count", {"count": n})
 
 # ---- チャット ----
 call(front, "POST", "/api/chat/messages", {"body": "本日19:30のデモツアー様、1名増の可能性ありとのことです。"})
