@@ -15,25 +15,6 @@ body.dayFuture{background:rgba(227,238,250,.5)}
 
 .summary{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
 .summary .sumCard{flex:1 0 108px;max-width:150px}
-/* 内訳カードは同じ行の残り幅いっぱいに広がり、入らなければ次の行へ */
-.summary .sumCard.cntCard{flex:100 1 300px;max-width:none}
-.cntItems{display:flex;flex-wrap:wrap;gap:4px 18px;margin-top:6px}
-.cntItem{display:flex;align-items:center;gap:5px;font-size:12px;color:#555;white-space:nowrap}
-.cntItem b{margin-left:2px;font-size:17px;line-height:1.2;color:var(--text);font-variant-numeric:tabular-nums}
-.cntItem.zero > :not(.cntTip){opacity:.45}
-.cntItem{position:relative;cursor:default;border-radius:4px;outline:none}
-.cntItem:focus-visible{box-shadow:0 0 0 2px #b5d4f4}
-.cntTip{display:none;position:absolute;top:calc(100% + 6px);left:-6px;z-index:60;min-width:170px;
-  background:#fff;border:1px solid #d6dbe1;border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.12);
-  padding:8px 10px;font-size:12px;color:#333;white-space:nowrap}
-.cntTip.alignRight{left:auto;right:-6px}
-.cntItem:hover .cntTip,.cntItem:focus .cntTip,.cntItem:focus-within .cntTip{display:block}
-.cntTip .tipHead{font-weight:700;margin-bottom:4px;color:var(--text)}
-.cntTip table{border-collapse:collapse;width:100%}
-.cntTip td{padding:2px 0;border-top:1px solid #f0f0f0}
-.cntTip td.num{text-align:right;padding-left:16px;font-variant-numeric:tabular-nums;font-weight:500}
-.cntTip p{margin:0}
-@media print{.cntTip{display:none !important}}
 .sumCard{border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:#fff}
 .sumCard .sumLabel{font-size:12px;color:#555;font-weight:500}
 .sumCard .sumMain{font-size:13px;margin-top:2px}
@@ -60,15 +41,6 @@ body.dayFuture{background:rgba(227,238,250,.5)}
 .ledgerTable tbody tr:hover td{background:#f7fbff}
 .ledgerTable tbody tr.slotBreak td{border-top:2px solid #cfdcea}
 .ledgerTable tbody tr.noSlot td:first-child{background:#fff9ec}
-/* 内訳アイコン */
-.cntIcon{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:4px;
-  font-size:13px;flex-shrink:0;box-sizing:border-box;cursor:help}
-.cntIcon.cp{background:#fdf0e1;color:#a55a00;border:1px dashed #d99a4e}
-.cntIcon.free{background:#e6f4ea;color:#2e7d32;border:1px solid #a5d6a7}
-.cntIcon.out{background:#f3e8fb;color:#7b3fa6;border:1px solid #d4b8ea}
-.cntBadges{display:inline-flex;gap:3px;margin-left:6px;vertical-align:-3px}
-.ledgerTable tbody tr.deleted .cntIcon{background:#eee;color:#aaa;border-color:#ccc}
-.abbrWrap{display:inline-flex;align-items:center;gap:4px}
 .ledgerTable td.status{white-space:nowrap}
 .entChk{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:#555;cursor:pointer;
   padding:3px 8px 3px 6px;border:1px solid #ddd;border-radius:6px;background:#fff}
@@ -150,7 +122,6 @@ body.dayFuture{background:rgba(227,238,250,.5)}
   .printTitle{display:block;font-size:16px;margin:0 0 8px}
   .printOnly{display:inline;font-weight:700}
   .ledgerTable .slotSel{display:none}
-  .cntIcon{-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .entChk{border:none;padding:0;background:none}
   .entChk input{display:none}
   .entChk:not(:has(input:checked)){visibility:hidden}
@@ -162,8 +133,6 @@ body.dayFuture{background:rgba(227,238,250,.5)}
   .ledgerTable tbody tr.noSlot td:first-child{background:none}
   .summary{gap:4px}
   .summary .sumCard{flex:1 0 70px}
-  .summary .sumCard.cntCard{flex:100 1 300px}
-  .cntIcon{width:14px;height:14px;font-size:10px}
   .sumCard{padding:4px 6px}
   .sumCard .sumMain b{font-size:15px}
   table.grid{font-size:11px}

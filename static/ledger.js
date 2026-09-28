@@ -31,22 +31,6 @@
     { key: 'updated', label: '更新', cls: 'noPrint', firstDir: -1, val: r => (r.deleted ? r.deleted_at : r.updated_at) || '' },
   ];
 
-  // 人数の内訳(フォームでは略称、ホバーで正式名称)
-  // icon: 大人=人 / 子供=子供の顔 / 外来=ドア、kind: 色分け(cp=クーポン, free=フリー, out=外来)
-  const COUNT_FIELDS = [
-    { key: 'adult_coupon', short: '大人CP', full: '大人クーポン(食事付)', icon: 'ti-user', kind: 'cp' },
-    { key: 'free_adult', short: 'フリー大', full: 'フリー大人(生打ち)', icon: 'ti-user', kind: 'free' },
-    { key: 'child_coupon', short: '子供CP', full: '子供クーポン(食事付)', icon: 'ti-mood-kid', kind: 'cp' },
-    { key: 'free_child', short: 'フリー子', full: 'フリー子供(生打ち)', icon: 'ti-mood-kid', kind: 'free' },
-    { key: 'outside', short: '外来', full: '外来', icon: 'ti-door-enter', kind: 'out' },
-  ];
-  const countIcon = (c, withTitle = true) => `<span class="cntIcon ${c.kind}"${withTitle ? ` title="${c.full}"` : ''} aria-label="${c.full}" role="img"><i class="ti ${c.icon}"></i></span>`;
-  // 数が1以上の内訳項目をアイコンで表示(数は出さない)
-  const countBadges = r => {
-    const icons = COUNT_FIELDS.filter(c => r[c.key] > 0).map(countIcon).join('');
-    return icons ? `<span class="cntBadges">${icons}</span>` : '';
-  };
-
   const params = new URLSearchParams(location.search);
   const state = {
     date: /^\d{4}-\d{2}-\d{2}$/.test(params.get('d') || '') ? params.get('d') : fmtDate(new Date()),
@@ -127,7 +111,7 @@
     return `${y === String(new Date().getFullYear()) ? '' : y + '/'}${+mo}/${+da} ${t.slice(0, 5)}`;
   };
   const FIELD_LABELS = { date: '日付', time_slot: '時間', room: '部屋', guest_name: '代表者名', adults: '大人',
-    children: '子供', infants: '幼児', ...Object.fromEntries(COUNT_FIELDS.map(c => [c.key, c.full])), nights: '泊数', night_no: '何泊目', group_id: 'グループ', entered_at: 'ステータス', allergy: 'アレルギー', note: '備考' };
+    children: '子供', infants: '幼児', nights: '泊数', night_no: '何泊目', group_id: 'グループ', entered_at: 'ステータス', allergy: 'アレルギー', note: '備考' };
   const nightsLabel = r => `${r.night_no}泊/${r.nights}泊`;
   const ACTION_LABELS = { create: '登録', update: '変更', delete: '削除', restore: '復元' };
   const fmtVal = (f, v) => f === 'time_slot' ? (v || '未定')
@@ -201,20 +185,8 @@
         <div class="sumMain"><b>${t}</b>名 <span>${a.n}組</span></div>
         <div class="sumSub">大${a.adults} 子${a.children} 幼${a.infants}</div></div>`;
     };
-    // 内訳(大人CP等)の1日合計。削除済みは含めない
-    // ホバー(フォーカス・タップ)で時間帯別の内訳を吹き出し表示。0 の時間帯は省く
-    const counts = COUNT_FIELDS.map((c, i) => {
-      const bySlot = {};
-      active().forEach(r => { const k = r.time_slot || UNSET; bySlot[k] = (bySlot[k] || 0) + (r[c.key] || 0); });
-      const n = Object.values(bySlot).reduce((a, b) => a + b, 0);
-      const lines = keys.filter(k => bySlot[k]).map(k => `<tr><td>${k || '未定'}</td><td class="num">${bySlot[k]}名</td></tr>`).join('');
-      const tip = `<div class="cntTip${i >= 3 ? ' alignRight' : ''}" role="tooltip"><div class="tipHead">${c.full}</div>
-        ${lines ? `<table>${lines}</table>` : '<p class="muted">該当なし</p>'}</div>`;
-      return `<div class="cntItem${n ? '' : ' zero'}" tabindex="0" aria-label="${c.full} ${n}名">${countIcon(c, false)}<span class="cntLbl">${c.short}</span><b>${n}</b>${tip}</div>`;
-    }).join('');
     $('ldSummary').innerHTML =
-      keys.map(k => card(k || '未定', agg[k], k ? '' : 'unset')).join('') + card('合計', agg['*'], 'total') +
-      `<div class="sumCard cntCard"><div class="sumLabel">内訳(1日合計)</div><div class="cntItems">${counts}</div></div>`;
+      keys.map(k => card(k || '未定', agg[k], k ? '' : 'unset')).join('') + card('合計', agg['*'], 'total');
   }
 
   function render() {
@@ -245,7 +217,7 @@
           <span class="printOnly">${r.time_slot || '未定'}</span>`}</td>
         <td class="status">${statusCell(r)}</td>
         <td class="room">${esc(r.room)}${groupTag(groups[r.group_id])}</td>
-        <td class="guest">${esc(r.guest_name)}${countBadges(r)}</td>
+        <td class="guest">${esc(r.guest_name)}</td>
         <td class="nights">${nightsLabel(r)}</td>
         <td class="num">${r.adults}</td><td class="num">${r.children}</td><td class="num">${r.infants}</td>
         <td class="num"><b>${total(r)}</b></td>
@@ -271,8 +243,7 @@
   function openForm(r) {
     const isNew = !r;
     if (r && r.deleted) return openDeleted(r);
-    r = r || { date: state.date, nights: 1, room: '', guest_name: '', adults: 2, children: 0, infants: 0, time_slot: null, allergy: '', note: '',
-      ...Object.fromEntries(COUNT_FIELDS.map(c => [c.key, 0])) };
+    r = r || { date: state.date, nights: 1, room: '', guest_name: '', adults: 2, children: 0, infants: 0, time_slot: null, allergy: '', note: '' };
     const dateLabel = d => `${d.replace(/-/g, '/')}(${dow(d)})`;
     // 人数は 0〜MAX_COUNT のプルダウン(既存データが上限超えなら、その値も選択肢に残す)
     const countSelect = (name, v, extra = '') => {
@@ -319,10 +290,6 @@
           <label>子供${countSelect('children', r.children)}</label>
           <label>幼児${countSelect('infants', r.infants)}</label>
         </div>
-        <div class="row countRow">
-          ${COUNT_FIELDS.map(c => `<label title="${c.full}"><span class="abbrWrap">${countIcon(c)}<span class="abbr">${c.short}</span></span>
-            ${countSelect(c.key, r[c.key] ?? 0, ` aria-label="${c.full}"`)}</label>`).join('')}
-        </div>
         <label>アレルギー<textarea name="allergy" maxlength="2000">${esc(r.allergy)}</textarea></label>
         <label>備考<textarea name="note" maxlength="2000">${esc(r.note)}</textarea></label>
         ${groupHtml}
@@ -346,7 +313,6 @@
               time_slot: f.time_slot.value || null,
               room: f.room.value, guest_name: f.guest_name.value,
               adults: +f.adults.value, children: +f.children.value, infants: +f.infants.value,
-              ...Object.fromEntries(COUNT_FIELDS.map(c => [c.key, +f[c.key].value])),
               allergy: f.allergy.value, note: f.note.value,
               grouped, group_with: grouped ? +f.group_with.value : null,
             };
@@ -422,7 +388,6 @@
         ${item('部屋番号', r.room)}${item('代表者名', r.guest_name)}
         ${item('泊数', r.nights > 1 ? `${r.nights}泊(${r.night_no}泊目)` : '1泊')}
         ${item('人数', `大人${r.adults} 子供${r.children} 幼児${r.infants}(計${total(r)})`)}
-        ${item('内訳', COUNT_FIELDS.filter(c => r[c.key]).map(c => `${c.full} ${r[c.key]}`).join('　'))}
         ${item('アレルギー', r.allergy)}${item('備考', r.note)}
       </div>${auditHtml(r)}`,
       buttons: [
