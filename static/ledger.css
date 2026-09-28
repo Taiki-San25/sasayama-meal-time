@@ -86,9 +86,9 @@ body.dayFuture{background:rgba(227,238,250,.5)}
 .ledgerTable tbody tr.deleted td.room{text-decoration:line-through}
 .ledgerTable tbody tr.deleted .allergy{color:#bbb}
 .ledgerTable tbody tr.deleted:hover td{background:#efefef}
-/* 大人0人の行: 赤字＋ピンク(透過80%)。入力漏れに気づけるように */
-.ledgerTable tbody tr.noAdult td{color:#c0392b;background:rgba(255,105,180,.2)}
-.ledgerTable tbody tr.noAdult:hover td{background:rgba(255,105,180,.28)}
+/* 大人0人の行: 赤字＋ピンク(透過93%)。入力漏れに気づけるように */
+.ledgerTable tbody tr.noAdult td{color:#c0392b;background:rgba(255,105,180,.07)}
+.ledgerTable tbody tr.noAdult:hover td{background:rgba(255,105,180,.12)}
 .ledgerTable tbody tr.noAdult select{color:#c0392b}
 .delBadge{display:inline-block;font-size:11px;padding:1px 7px;border-radius:999px;background:#ddd;color:#666}
 
