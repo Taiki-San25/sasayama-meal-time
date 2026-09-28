@@ -4,6 +4,7 @@
   const { esc, api, toast, modal } = AMT;
   const REFRESH_MS = 30000;
   const SNAP = 4;  // 配置編集の移動の刻み
+  const ALIGN_TH = 10;  // 他の卓の端・中心にこの距離まで近づいたら揃える(吸着)
   const SEAT_SIZES = { 2: [56, 58], 4: [70, 58], 6: [96, 58] };  // サーバー(floor.py)と同じ
   const svgNS = 'http://www.w3.org/2000/svg';
 
@@ -192,9 +193,10 @@
         ${rs.length ? `<text class="tRoom" x="${t.x + t.w / 2}" y="${t.y + 33}">${esc(fit(rooms, t.w))}</text>
         <text class="tPeople" x="${t.x + t.w / 2}" y="${t.y + 50}">${allergy ? '⚠' : ''}大${o.adults}幼${o.children}席${o.infants}</text>` : ''}
       </g>`;
-    }).join('');
+    }).join('') + (state.edit && state.edit.guides ? state.edit.guides.map(g =>
+      `<line class="guide" x1="${g.x1}" y1="${g.y1}" x2="${g.x2}" y2="${g.y2}"/>`).join('') : '');
     const hint = state.edit
-      ? '卓をタップで選択(複数可)、ドラッグで移動。選んだ卓は右で番号・席数を変更できます。'
+      ? '卓をタップで選択(複数可)、ドラッグで移動(他の卓と端・中心が揃うと赤い線が出て吸着、Altキーを押しながらで吸着なし)。選んだ卓は矢印キーで微調整、複数選ぶと「揃える」「等間隔」が使えます。'
       : state.moveFrom ? '移動先の卓をタップしてください(もう一度同じ卓で取り消し)。'
       : state.selected ? '割り当てる卓をタップしてください(割り当て済みの卓なら相席になります)。'
       : '予約を選んでから卓をタップ、またはドラッグ&ドロップで割り当てます。割り当て済みの卓をタップすると外す・移動ができます。人数(大人+幼児+席のみ)が席数を超えると赤字になります。';
@@ -273,6 +275,9 @@
       const t = state.edit.tables.find(x => x.id === id);
       const p = toCanvas(e.clientX, e.clientY);
       drag.ox = p.x - t.x; drag.oy = p.y - t.y;
+      // 選択中の卓をドラッグしたときは、選択中の卓をまとめて動かす
+      const ids = state.edit.sel.has(id) ? state.edit.sel : new Set([id]);
+      drag.group = state.edit.tables.filter(x => ids.has(x.id)).map(x => ({ t: x, dx: x.x - t.x, dy: x.y - t.y }));
     }
     window.addEventListener('pointermove', onDragMove);
     window.addEventListener('pointerup', onDragEnd, { once: true });
@@ -296,8 +301,16 @@
     if (drag.kind === 'layout') {
       const t = state.edit.tables.find(x => x.id === drag.id);
       const p = toCanvas(e.clientX, e.clientY);
-      t.x = Math.max(0, Math.min(state.data.canvas.w - t.w, Math.round((p.x - drag.ox) / SNAP) * SNAP));
-      t.y = Math.max(0, Math.min(state.data.canvas.h - t.h, Math.round((p.y - drag.oy) / SNAP) * SNAP));
+      const pos = alignPosition(t, p.x - drag.ox, p.y - drag.oy, !e.altKey);
+      // まとめて動かすときは、全体がキャンバスからはみ出さないように動かす量を抑える
+      const { w: CW, h: CH } = state.data.canvas;
+      let dx = pos.x - t.x, dy = pos.y - t.y;
+      drag.group.forEach(({ t: g }) => {
+        dx = Math.max(dx, -g.x); dx = Math.min(dx, CW - g.w - g.x);
+        dy = Math.max(dy, -g.y); dy = Math.min(dy, CH - g.h - g.y);
+      });
+      drag.group.forEach(({ t: g }) => { g.x += dx; g.y += dy; });
+      state.edit.guides = pos.guides;
       state.edit.dirty = true;
       renderMap();
       return;
@@ -309,8 +322,42 @@
     const over = document.elementFromPoint(e.clientX, e.clientY)?.closest('[data-table]');
     if (over) over.classList.add('over');
   }
+  // ドラッグ中の卓を、他の卓の左端・中心・右端(横)、上端・中心・下端(高さ)に吸着させる
+  function alignPosition(t, x, y, snap) {
+    const others = state.edit.tables.filter(o => o !== t && !(drag.group || []).some(g => g.t === o));
+    const guides = [];
+    const best = (pos, size, key) => {
+      let hit = null;
+      for (const o of others) {
+        const os = key === 'x' ? o.x : o.y, ol = key === 'x' ? o.w : o.h;
+        for (const [a, oa] of [[0, 0], [size / 2, ol / 2], [size, ol], [0, ol], [size, 0]]) {
+          const d = os + oa - (pos + a);
+          if (Math.abs(d) <= ALIGN_TH && (!hit || Math.abs(d) < Math.abs(hit.d))) hit = { d, line: os + oa, o };
+        }
+      }
+      return hit;
+    };
+    if (!snap) return { x: Math.round(x), y: Math.round(y), guides };
+    const hx = best(x, t.w, 'x'), hy = best(y, t.h, 'y');
+    const nx = hx ? x + hx.d : Math.round(x / SNAP) * SNAP;
+    const ny = hy ? y + hy.d : Math.round(y / SNAP) * SNAP;
+    // 揃った線をすべて表示(同じ線に並ぶ卓をまたいで引く)
+    const lines = (key, line) => {
+      const on = others.filter(o => key === 'x'
+        ? [o.x, o.x + o.w / 2, o.x + o.w].some(v => Math.abs(v - line) < 0.5)
+        : [o.y, o.y + o.h / 2, o.y + o.h].some(v => Math.abs(v - line) < 0.5));
+      const span = on.concat({ x: nx, y: ny, w: t.w, h: t.h });
+      if (key === 'x') guides.push({ x1: line, x2: line, y1: Math.min(...span.map(o => o.y)) - 8, y2: Math.max(...span.map(o => o.y + o.h)) + 8 });
+      else guides.push({ y1: line, y2: line, x1: Math.min(...span.map(o => o.x)) - 8, x2: Math.max(...span.map(o => o.x + o.w)) + 8 });
+    };
+    if (hx) lines('x', hx.line);
+    if (hy) lines('y', hy.line);
+    return { x: Math.round(nx), y: Math.round(ny), guides };
+  }
+
   function cancelDrag() {
     window.removeEventListener('pointermove', onDragMove);
+    if (state.edit) state.edit.guides = null;
     if (drag && drag.ghost) drag.ghost.remove();
     document.body.classList.remove('dragging');
     map.querySelectorAll('.tbl.over').forEach(g => g.classList.remove('over'));
@@ -326,7 +373,7 @@
       else onTableClick(dg.id);
       return;
     }
-    if (dg.kind === 'layout') return renderList();
+    if (dg.kind === 'layout') { renderMap(); return renderList(); }
     if (!target) return;
     const to = target.dataset.table;
     if (dg.kind === 'res') assign(dg.id, to).catch(() => {});
@@ -402,6 +449,11 @@
       <button class="btn" data-eb="merge" ${sel.length >= 2 ? '' : 'disabled'}><i class="ti ti-link"></i>連結</button>
       <button class="btn" data-eb="split" ${one && one.parts ? '' : 'disabled'}><i class="ti ti-unlink"></i>連結を解除</button>
       <button class="btn" data-eb="delete" ${sel.length ? '' : 'disabled'}><i class="ti ti-trash"></i>削除</button>
+      <span class="ebSep"></span>
+      <button class="btn" data-eb="alignRow" ${sel.length >= 2 ? '' : 'disabled'} title="選んだ卓の高さ(中心)を揃える"><i class="ti ti-layout-align-middle"></i>高さを揃える</button>
+      <button class="btn" data-eb="alignCol" ${sel.length >= 2 ? '' : 'disabled'} title="選んだ卓の横位置(中心)を揃える"><i class="ti ti-layout-align-center"></i>横位置を揃える</button>
+      <button class="btn" data-eb="spaceH" ${sel.length >= 3 ? '' : 'disabled'} title="選んだ卓を左右の卓の間で等間隔に並べる"><i class="ti ti-layout-distribute-vertical"></i>横に等間隔</button>
+      <button class="btn" data-eb="spaceV" ${sel.length >= 3 ? '' : 'disabled'} title="選んだ卓を上下の卓の間で等間隔に並べる"><i class="ti ti-layout-distribute-horizontal"></i>縦に等間隔</button>
       ${e.target === 'day' ? `<button class="btn" data-eb="copyPrev"><i class="ti ti-copy"></i>前日の配置をコピー</button>
         <button class="btn" data-eb="reset"><i class="ti ti-restore"></i>基本に戻す</button>` : ''}
       <span class="ebSpacer"></span>
@@ -508,6 +560,20 @@
       toast(r.released ? `基本に戻しました(割り当て${r.released}件を外しました)` : '基本に戻しました');
       state.edit = null;
       return load();
+    } else if (['alignRow', 'alignCol', 'spaceH', 'spaceV'].includes(act)) {
+      // 揃える: 最初に選んだ卓(選択順の先頭)に合わせる。等間隔: 両端の卓は動かさず間を均等に
+      const first = e.tables.find(t => t.id === [...e.sel][0]);
+      if (act === 'alignRow') sel.forEach(t => { t.y = Math.round(first.y + first.h / 2 - t.h / 2); });
+      else if (act === 'alignCol') sel.forEach(t => { t.x = Math.round(first.x + first.w / 2 - t.w / 2); });
+      else {
+        const k = act === 'spaceH' ? 'x' : 'y', sz = act === 'spaceH' ? 'w' : 'h';
+        const list = [...sel].sort((a, b) => a[k] - b[k]);
+        const start = list[0][k], end = list[list.length - 1][k] + list[list.length - 1][sz];
+        const gap = (end - start - list.reduce((n, t) => n + t[sz], 0)) / (list.length - 1);
+        let pos = start;
+        list.forEach(t => { t[k] = Math.round(pos); pos += t[sz] + gap; });
+      }
+      e.dirty = true;
     } else if (act === 'cancel') {
       if (e.dirty && !(await confirmDialog({ title: '編集をやめる', message: '保存していない変更は失われます。よろしいですか？', ok: '変更を破棄' }))) return;
       return exitEdit();
@@ -578,6 +644,19 @@
     if (e.target.value) setDate(e.target.value);
   });
   document.addEventListener('keydown', e => {
+    const arrows = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+    if (state.edit && state.edit.sel.size && arrows[e.key] && !AMT.isModalOpen() && !e.target.closest?.('input,select,textarea')) {
+      e.preventDefault();
+      const step = e.shiftKey ? 10 : 1;  // Shift で10ずつ
+      const [ax, ay] = arrows[e.key];
+      const { w: CW, h: CH } = state.data.canvas;
+      state.edit.tables.filter(t => state.edit.sel.has(t.id)).forEach(t => {
+        t.x = Math.max(0, Math.min(CW - t.w, t.x + ax * step));
+        t.y = Math.max(0, Math.min(CH - t.h, t.y + ay * step));
+      });
+      state.edit.dirty = true;
+      return renderMap();
+    }
     if (e.key === 'Escape' && !AMT.isModalOpen() && (state.selected || state.moveFrom)) {
       state.selected = state.moveFrom = null;
       render();

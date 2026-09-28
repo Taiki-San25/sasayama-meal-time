@@ -70,6 +70,7 @@ body.dayFuture{background:rgba(227,238,250,.5)}
 .tbl.moving rect{stroke:#ef9f27;stroke-width:3;stroke-dasharray:6 3}
 .tbl.over rect,.tbl:focus-visible rect{stroke:#ef9f27;stroke-width:3}
 .tbl.picked rect{stroke:#e24b4a;stroke-width:3}
+.flMap .guide{stroke:#e24b4a;stroke-width:1.5;stroke-dasharray:6 4;pointer-events:none}
 .tbl:hover rect{stroke-width:2.5}
 body.floorEditing .tbl{cursor:move}
 .dragGhost{position:fixed;z-index:200;pointer-events:none;padding:4px 10px;border-radius:6px;background:#185fa5;color:#fff;
