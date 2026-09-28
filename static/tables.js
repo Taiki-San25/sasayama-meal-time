@@ -123,7 +123,7 @@
 
   function resCard(r, assigned) {
     const tbl = assigned ? tablesOfRes(r.id) : [];
-    return `<div class="resCard${state.selected === r.id ? ' sel' : ''}${r.entered_at ? ' entered' : ''}" data-rid="${r.id}" tabindex="0">
+    return `<div class="resCard${assigned ? '' : ' todo'}${state.selected === r.id ? ' sel' : ''}${r.entered_at ? ' entered' : ''}" data-rid="${r.id}" tabindex="0">
       <div class="rcTop"><b title="${esc(r.room)}">${esc(roomText(r.room))}</b><span class="rcName">${esc(r.guest_name)}</span></div>
       <div class="rcSub">大${r.adults} 幼${r.children} 席${r.infants}
         ${r.allergy ? `<span class="rcAllergy" title="${esc(r.allergy)}"><i class="ti ti-alert-triangle"></i>アレルギー</span>` : ''}
