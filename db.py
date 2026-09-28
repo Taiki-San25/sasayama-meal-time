@@ -109,12 +109,6 @@ class Reservation(Base):
     adults: Mapped[int] = mapped_column(Integer, default=0)
     children: Mapped[int] = mapped_column(Integer, default=0)
     infants: Mapped[int] = mapped_column(Integer, default=0)
-    # 内訳の人数: 大人クーポン(食事付) / フリー大人(生打ち) / フリー子供(生打ち) / 子供クーポン(食事付) / 外来
-    adult_coupon: Mapped[int] = mapped_column(Integer, default=0)
-    free_adult: Mapped[int] = mapped_column(Integer, default=0)
-    free_child: Mapped[int] = mapped_column(Integer, default=0)
-    child_coupon: Mapped[int] = mapped_column(Integer, default=0)
-    outside: Mapped[int] = mapped_column(Integer, default=0)
     time_slot: Mapped[str | None] = mapped_column(String(16), nullable=True)  # None = 未定
     nights: Mapped[int] = mapped_column(Integer, default=1)    # 泊数
     night_no: Mapped[int] = mapped_column(Integer, default=1)  # 何泊目か
@@ -178,14 +172,11 @@ ADDED_COLUMNS = [
     ("users", "role", "VARCHAR(16) NOT NULL DEFAULT 'front'", "UPDATE users SET role = 'admin' WHERE is_admin"),
     ("reservations", "entered_at", "TIMESTAMP", None),
     ("reservations", "entered_by", "INTEGER", None),
-    ("reservations", "adult_coupon", "INTEGER NOT NULL DEFAULT 0", None),
-    ("reservations", "free_adult", "INTEGER NOT NULL DEFAULT 0", None),
-    ("reservations", "free_child", "INTEGER NOT NULL DEFAULT 0", None),
-    ("reservations", "child_coupon", "INTEGER NOT NULL DEFAULT 0", None),
-    ("reservations", "outside", "INTEGER NOT NULL DEFAULT 0", None),
     ("floor_layouts", "version", "INTEGER NOT NULL DEFAULT 1", None),
     ("reservations", "ext_key", "VARCHAR(64)", "CREATE INDEX IF NOT EXISTS ix_reservations_ext_key ON reservations (ext_key)"),
 ]
+# 使わなくなって削除した列: (テーブル, 列)。起動時に残っていれば消す
+DROPPED_COLUMNS = [("reservations", c) for c in ("adult_coupon", "free_adult", "free_child", "child_coupon", "outside")]
 # 後から桁数を広げた文字列の列: (テーブル, 列, 桁数)。SQLite は桁数を見ないので PostgreSQL のみ
 WIDENED_COLUMNS = [("reservations", "room", 255)]
 
@@ -198,6 +189,9 @@ def _migrate() -> None:
                 conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}"))
                 if backfill:
                     conn.execute(text(backfill))
+        for table, col in DROPPED_COLUMNS:
+            if col in {c["name"] for c in insp.get_columns(table)}:
+                conn.execute(text(f"ALTER TABLE {table} DROP COLUMN {col}"))
         if engine.dialect.name == "postgresql":
             for table, col, length in WIDENED_COLUMNS:
                 cur = next(c for c in insp.get_columns(table) if c["name"] == col)
