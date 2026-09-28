@@ -127,13 +127,13 @@
       ? `<span class="multiRoom" title="${esc(rooms.join(', '))}">${esc(rooms[0])} <small>他${rooms.length - 1}室</small></span>`
       : esc(room);
   };
-  // テーブル列: 2卓までは全部、3卓以上は「1 他9卓」(部屋の列と同じ形)。ホバーで全卓、クリックでテーブルアサインへ
+  // テーブル列: 2卓までは全部、3卓以上は「1 他9卓」(部屋の列と同じ形)。ホバーで全卓
   const TABLES_SHOWN = 2;
   const tableLabel = r => {
     const ts = r.tables || [];
     if (!ts.length) return '';
     const text = ts.length > TABLES_SHOWN ? `${esc(ts[0])} <small>他${ts.length - 1}卓</small>` : esc(ts.join('・'));
-    return `<a href="/tables?d=${r.date}&t=${encodeURIComponent(r.time_slot || '')}" title="テーブル: ${esc(ts.join('・'))}">${text}</a>`;
+    return `<span title="テーブル: ${esc(ts.join('・'))}">${text}</span>`;
   };
   const fmtVal = (f, v) => f === 'time_slot' ? (v || '未定')
     : f === 'group_id' ? (v ? 'あり' : 'なし')
