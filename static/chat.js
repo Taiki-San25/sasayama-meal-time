@@ -166,8 +166,8 @@
     const list = m.querySelector('.pickList');
     let rows = [];
     const draw = () => {
-      const k = q.value.trim().toLowerCase();
-      const shown = rows.filter(r => !k || [r.room, r.guest_name, r.allergy, r.note].join(' ').toLowerCase().includes(k));
+      const k = AMT.normSearch(q.value);  // ひらがな・全角カナでも半角カナの名前に当たる
+      const shown = rows.filter(r => !k || [r.room, r.guest_name, r.allergy, r.note].some(v => AMT.normSearch(v).includes(k)));
       list.innerHTML = shown.length ? shown.map(r => `<button type="button" class="pickItem" data-id="${r.id}">
           <b title="${esc(r.room)}">${esc(roomText(r.room))}</b><span>${esc(r.guest_name)}</span><span class="muted">${r.time_slot || '時間未定'}</span>
           ${r.allergy ? `<span class="pickAllergy"><i class="ti ti-alert-triangle"></i>${esc(r.allergy)}</span>` : ''}

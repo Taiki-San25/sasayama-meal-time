@@ -73,7 +73,13 @@ window.AMT = (function () {
     return wrap;
   }
 
-  return { esc, api, toast, modal, isModalOpen: () => !!document.querySelector('.modalWrap') };
+  // 検索用の正規化: 半角カナ→全角(NFKC)、ひらがな→カタカナ、英字は小文字、空白は無視
+  // (ﾔﾏﾀﾞ・ヤマダ・やまだ のどれでも同じ名前に当たる)
+  const normSearch = v => String(v ?? '').normalize('NFKC')
+    .replace(/[ぁ-ゖ]/g, c => String.fromCharCode(c.charCodeAt(0) + 0x60))
+    .replace(/\s+/g, '').toLowerCase();
+
+  return { esc, api, toast, modal, normSearch, isModalOpen: () => !!document.querySelector('.modalWrap') };
 })();
 
 /* common.js — 上部バー・サイドバーを生成し、body直下の要素を #mainContent に移す */

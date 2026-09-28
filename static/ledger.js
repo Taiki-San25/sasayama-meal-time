@@ -2,7 +2,7 @@
 (function () {
   const root = document.getElementById('ledger');
   const MEAL = root.dataset.meal;
-  const { esc, api, toast, modal } = AMT;
+  const { esc, api, toast, modal, normSearch } = AMT;
   const REFRESH_MS = 30000;
   const UNSET = '';  // 時間未定
   const MAX_COUNT = 99;  // 人数の上限(サーバー側と同じ)
@@ -146,12 +146,6 @@
   const groupTag = (g, extra = '') => g
     ? `<span class="grpTag g${(g.no - 1) % GROUP_COLORS}" title="グループ: ${esc(g.members.map(m => roomText(m.room)).join('・'))}">G${g.no}</span>${extra}`
     : '';
-
-  // 検索用の正規化: 半角カナ→全角(NFKC)、ひらがな→カタカナ、英字は小文字、空白は無視
-  // (ﾔﾏﾀﾞ・ヤマダ・やまだ・ﾔﾏﾀﾞ(濁点付き)のどれでも同じ名前に当たる)
-  const normSearch = v => String(v || '').normalize('NFKC')
-    .replace(/[ぁ-ゖ]/g, c => String.fromCharCode(c.charCodeAt(0) + 0x60))
-    .replace(/\s+/g, '').toLowerCase();
 
   function visibleRows() {
     const q = normSearch(state.q);
