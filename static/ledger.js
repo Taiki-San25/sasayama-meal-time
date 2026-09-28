@@ -56,6 +56,7 @@
       <input type="search" id="ldSearch" placeholder="予約番号・部屋・名前・備考で検索" aria-label="検索">
       <label class="delToggle"><input type="checkbox" id="ldShowDeleted">削除済みも表示</label>
       <div class="barRight">
+        <button class="btn" data-act="slots" title="時間枠の追加・削除"><i class="ti ti-clock-edit"></i>時間枠</button>
         <button class="btn" data-act="print"><i class="ti ti-printer"></i>印刷</button>
         <button class="btn primary" data-act="add"><i class="ti ti-plus"></i>追加</button>
       </div>
@@ -448,7 +449,47 @@
     else if (act === 'today') setDate(fmtDate(new Date()));
     else if (act === 'print') window.print();
     else if (act === 'add') openForm(null);
+    else if (act === 'slots') openSlots().catch(() => {});
   });
+
+  // 時間枠の追加・削除(全ロール可。固定の枠は鍵付きで削除不可)
+  async function openSlots() {
+    const fixed = await api(`/api/slots/${MEAL}/fixed`);
+    let slots = [...state.slots];
+    const m = modal({
+      title: `${MEAL === 'dinner' ? '夕食' : '朝食'}の時間枠`,
+      body: `<div class="slotEdit"><div class="slotChips"></div>
+        <div class="slotAdd"><input type="time" step="300" aria-label="追加する時刻"><button type="button" class="btn" data-sadd><i class="ti ti-plus"></i>追加</button></div>
+        <p class="muted" style="margin:8px 0 0;font-size:12px">鍵の付いた時間枠は削除できません。すでに予約が入っている時間枠を削除しても、予約の時間はそのまま残ります。</p></div>`,
+      buttons: [{ label: 'キャンセル' }, {
+        label: '保存する', primary: true, onClick: async () => {
+          state.slots = await api(`/api/slots/${MEAL}`, { method: 'PUT', body: { slots } });
+          toast('時間枠を保存しました');
+          render();
+        }
+      }],
+    });
+    const chips = m.querySelector('.slotChips');
+    const input = m.querySelector('input[type=time]');
+    const draw = () => {
+      chips.innerHTML = slots.map(s => fixed.includes(s)
+        ? `<span class="slotChip fixed" title="固定の時間枠のため削除できません">${s}<i class="ti ti-lock" aria-label="削除不可"></i></span>`
+        : `<span class="slotChip">${s}<button type="button" data-sdel="${s}" aria-label="${s} を削除"><i class="ti ti-x"></i></button></span>`).join('')
+        || '<span class="muted">時間枠がありません</span>';
+    };
+    const add = () => {
+      if (input.value && !slots.includes(input.value)) slots = [...slots, input.value].sort();
+      input.value = '';
+      draw();
+    };
+    m.querySelector('[data-sadd]').addEventListener('click', add);
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
+    chips.addEventListener('click', e => {
+      const s = e.target.closest('[data-sdel]')?.dataset.sdel;
+      if (s && !fixed.includes(s)) { slots = slots.filter(x => x !== s); draw(); }
+    });
+    draw();
+  }
   dateInput.addEventListener('change', () => { if (dateInput.value) setDate(dateInput.value); });
   $('ldSearch').addEventListener('input', e => { state.q = e.target.value; render(); });
   root.querySelector('thead').addEventListener('click', e => {

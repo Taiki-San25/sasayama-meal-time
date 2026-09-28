@@ -211,7 +211,8 @@ class SlotsIn(BaseModel):
 
 
 @app.put("/api/slots/{meal}")
-def put_slots(meal: str, body: SlotsIn, _: User = Depends(admin_user), db: Session = Depends(get_db)):
+def put_slots(meal: str, body: SlotsIn, _: User = Depends(current_user), db: Session = Depends(get_db)):
+    """時間枠の保存(全ロール可。17:30・19:30 など固定の枠は外せない)"""
     check_meal(meal)
     missing = [s for s in FIXED_SLOTS[meal] if s not in body.slots]
     if missing:

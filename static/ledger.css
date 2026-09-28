@@ -152,3 +152,12 @@ body.dayFuture{background:rgba(227,238,250,.5)}
 .stayBadge{display:inline-block;padding:1px 8px;border-radius:6px;background:#faeeda;color:#633806;border:1px solid #ef9f27;font-weight:700}
 .ledgerTable tbody tr.deleted .stayBadge{background:#e6e6e6;color:#999;border-color:#ccc}
 @media print{.stayBadge{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+/* 時間枠の追加・削除 */
+.slotChips{display:flex;flex-wrap:wrap;gap:6px;min-height:30px;margin-bottom:10px}
+.slotChip{display:inline-flex;align-items:center;gap:2px;padding:0 4px 0 10px;height:28px;border-radius:999px;
+  background:#e6f1fb;color:#185fa5;font-size:13px;font-variant-numeric:tabular-nums}
+.slotChip button{border:none;background:transparent;color:inherit;cursor:pointer;padding:0 4px;display:flex}
+.slotChip.fixed{padding-right:10px}
+.slotChip.fixed i{font-size:13px;margin-left:4px;opacity:.7}
+.slotAdd{display:flex;gap:6px}
+.slotAdd input{width:130px;flex:none}
