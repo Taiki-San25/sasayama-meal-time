@@ -101,7 +101,8 @@ window.AMT = (function () {
       { label: '朝食時間管理表', icon: 'ti-sun', href: '/breakfast' },
       { label: '朝食集計', icon: 'ti-chart-bar', href: '/breakfast-summary' },
       { label: 'チャット', icon: 'ti-messages', href: '/chat', badgeKey: 'chat' },
-      { label: '操作ログ', icon: 'ti-list-details', href: '/logs' }
+      { label: '操作ログ', icon: 'ti-list-details', href: '/logs' },
+      { label: '操作説明', icon: 'ti-book', href: '/manual' }
     ],
     adminMenu: {
       heading: '管理者メニュー',

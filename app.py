@@ -1482,7 +1482,17 @@ def operation_logs(start: date, end: date, _: User = Depends(current_user), db: 
 
 
 # ---------- ページ ----------
-PAGES = {"dinner", "tables", "breakfast", "dinner-summary", "breakfast-summary", "chat", "logs", "admin"}
+PAGES = {"dinner", "tables", "breakfast", "dinner-summary", "breakfast-summary", "chat", "logs", "manual", "admin"}
+
+
+@app.get("/manual.pdf", include_in_schema=False)
+def manual_pdf(request: Request, db: Session = Depends(get_db)):
+    """操作説明書(PDF)。ログインした人だけに配信する(docs/manual の build_pdf.py で作り直す)"""
+    if not session_user(request, db):
+        return RedirectResponse("/login")
+    return FileResponse(BASE / "docs" / "manual.pdf", media_type="application/pdf",
+                        headers={"Content-Disposition": "inline; filename*=UTF-8''" + quote("喫食時間管理表_操作説明書.pdf"),
+                                 "Cache-Control": "no-cache"})
 
 
 @app.get("/favicon.ico", include_in_schema=False)

@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>喫食時間管理表 操作説明書</title>
+<style>
+  @page { size: A4; margin: 14mm 14mm 16mm; }
+  * { box-sizing: border-box; }
+  body { font-family: "Yu Gothic UI", "Yu Gothic", "Meiryo", sans-serif; font-size: 10.5pt; line-height: 1.7; color: #1f2328; margin: 0; }
+  h1, h2, h3 { line-height: 1.35; }
+  .cover { height: 250mm; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; page-break-after: always; }
+  .cover img { width: 34mm; }
+  .cover .hotel { font-size: 15pt; margin: 8mm 0 2mm; color: #555; }
+  .cover h1 { font-size: 28pt; margin: 0; }
+  .cover .sub { font-size: 13pt; color: #185fa5; margin-top: 4mm; }
+  .cover .date { margin-top: 30mm; color: #777; font-size: 10pt; }
+  h2 { font-size: 16pt; color: #0c447c; border-bottom: 2.5px solid #185fa5; padding-bottom: 2mm; margin: 0 0 4mm; page-break-before: always; }
+  h2.first { page-break-before: auto; }
+  h3 { font-size: 12pt; margin: 6mm 0 2mm; padding-left: 3mm; border-left: 4px solid #ef9f27; }
+  p { margin: 0 0 2.5mm; }
+  ol, ul { margin: 0 0 3mm; padding-left: 6mm; }
+  li { margin-bottom: 1mm; }
+  figure { margin: 3mm 0 5mm; page-break-inside: avoid; }
+  figure img { width: 100%; border: 1px solid #d0d7de; border-radius: 4px; }
+  figcaption { font-size: 9pt; color: #666; margin-top: 1mm; text-align: center; }
+  table { border-collapse: collapse; width: 100%; margin: 2mm 0 4mm; font-size: 9.5pt; page-break-inside: avoid; }
+  th, td { border: 1px solid #d0d7de; padding: 1.5mm 2.5mm; vertical-align: top; text-align: left; }
+  th { background: #eef4fb; font-weight: 700; }
+  td.c, th.c { text-align: center; }
+  .note { background: #fff8e6; border: 1px solid #f0c36d; border-radius: 4px; padding: 2.5mm 3.5mm; margin: 3mm 0 4mm; page-break-inside: avoid; }
+  .note b:first-child { color: #a55a00; }
+  .tip { background: #eef7ee; border: 1px solid #a5d6a7; border-radius: 4px; padding: 2.5mm 3.5mm; margin: 3mm 0 4mm; page-break-inside: avoid; }
+  .key { display: inline-block; border: 1px solid #aaa; border-bottom-width: 2px; border-radius: 3px; padding: 0 1.5mm; font-size: 9pt; background: #fafafa; }
+  .toc { page-break-after: always; }
+  .toc h2 { page-break-before: auto; }
+  .toc ol { font-size: 11.5pt; line-height: 2; }
+  .swatch { display: inline-block; width: 4mm; height: 4mm; border: 1px solid #bbb; vertical-align: -0.6mm; margin-right: 1mm; }
+  .badge { display: inline-block; font-size: 8.5pt; padding: 0 2mm; border-radius: 3mm; }
+</style>
+</head>
+<body>
+
+<section class="cover">
+  <img src="../../static/logo.png" alt="">
+  <div class="hotel">グランヴィリオホテル丹波篠山</div>
+  <h1>喫食時間管理表</h1>
+  <div class="sub">操作説明書</div>
+  <div class="date">2026年10月版　／　画面の写真のお客様名・人数はすべて説明用の架空のものです</div>
+</section>
+
+<section class="toc">
+  <h2>目次</h2>
+  <ol>
+    <li>はじめに(ログイン・画面の見方・ロールとできること)</li>
+    <li>夕食・朝食時間管理表</li>
+    <li>CSVアップロード(宿泊者リストの取り込み)</li>
+    <li>テーブルアサイン</li>
+    <li>夕食集計・朝食集計</li>
+    <li>チャット</li>
+    <li>操作ログ</li>
+    <li>管理者ページ</li>
+    <li>困ったときは(よくある質問)</li>
+  </ol>
+</section>
+
+<!-- 1 -->
+<h2 class="first">1. はじめに</h2>
+<h3>ログイン</h3>
+<p>管理者から受け取ったログインIDとパスワードでログインします。ログインは12時間有効です。パスワードは画面右上の「パスワード変更」から自分で変えられます(4文字以上)。</p>
+<figure><img src="img/01_login.png" alt=""><figcaption>ログイン画面</figcaption></figure>
+
+<h3>画面の見方</h3>
+<ul>
+  <li><b>上部バー</b>: 右側に「アップロード」(フロント・管理者のみ)、「パスワード変更」「ログアウト」。</li>
+  <li><b>左のメニュー</b>: 夕食時間管理表 / テーブルアサイン / 夕食集計 / 朝食時間管理表 / 朝食集計 / チャット / 操作ログ / 操作説明。管理者には「管理者ページ」も表示されます。矢印ボタンでメニューを細くたためます。スマホでは左上の三本線で開きます。</li>
+  <li>チャットに未読があると、メニューに赤い数字が出ます。</li>
+</ul>
+
+<h3>ロールとできること</h3>
+<table>
+  <tr><th>できること</th><th class="c">developer</th><th class="c">管理者</th><th class="c">フロント</th><th class="c">レストラン</th></tr>
+  <tr><td>管理表の閲覧・予約の追加/編集/削除・人数入力・時間枠の追加/削除</td><td class="c">○</td><td class="c">○</td><td class="c">○</td><td class="c">○</td></tr>
+  <tr><td>「入場済」にする・取り消す</td><td class="c">○</td><td class="c">×</td><td class="c">×</td><td class="c">○</td></tr>
+  <tr><td>CSVアップロード(宿泊者リストの取り込み)</td><td class="c">○</td><td class="c">○</td><td class="c">○</td><td class="c">×</td></tr>
+  <tr><td>テーブルの割り当て・卓メモ</td><td class="c">○</td><td class="c">○</td><td class="c">○</td><td class="c">○</td></tr>
+  <tr><td>テーブル配置の編集</td><td class="c">○</td><td class="c">○</td><td class="c">×</td><td class="c">○</td></tr>
+  <tr><td>集計・チャット・操作ログ・操作説明</td><td class="c">○</td><td class="c">○</td><td class="c">○</td><td class="c">○</td></tr>
+  <tr><td>管理者ページ(ユーザー管理)</td><td class="c">○</td><td class="c">○</td><td class="c">×</td><td class="c">×</td></tr>
+</table>
+
+<!-- 2 -->
+<h2>2. 夕食・朝食時間管理表</h2>
+<p>その日の夕食(朝食)の予約を一覧で管理する画面です。夕食と朝食は同じ操作です。</p>
+<figure><img src="img/10_dinner.png" alt=""><figcaption>夕食時間管理表</figcaption></figure>
+
+<h3>日付を変える・探す</h3>
+<ul>
+  <li>「＜」「＞」で前日・翌日、「今日」で今日に戻ります。カレンダーから日付を選ぶこともできます。</li>
+  <li>背景色: 今日は白、昨日以前はグレー、翌日以降は薄い青です(見ている日付を間違えないため)。</li>
+  <li>検索欄: 予約番号・部屋・名前・アレルギー・備考で絞り込み。<b>ひらがな・全角カナでも半角カナの名前に当たります</b>(「おがわ」で「ｵｶﾞﾜ」)。</li>
+  <li>上の時間枠のカードで、時間ごとの人数・組数(大人/幼児/席のみの内訳)が分かります。</li>
+</ul>
+
+<h3>一覧の見方</h3>
+<table>
+  <tr><th style="width:30%">表示</th><th>意味</th></tr>
+  <tr><td><span class="swatch" style="background:rgba(255,105,180,.12)"></span>赤い文字・薄いピンクの行</td><td>大人が0人(人数が未入力)の予約。CSVで取り込んだ直後はこの状態です。</td></tr>
+  <tr><td><span class="badge" style="background:#faeeda;color:#633806;border:1px solid #ef9f27">2泊/3泊</span></td><td>連泊の2泊目以降(何泊目/泊数)。</td></tr>
+  <tr><td>210 <small>他2室</small></td><td>複数の部屋の予約。マウスを重ねると全部の部屋番号が出ます。</td></tr>
+  <tr><td>G1・G2…</td><td>グループ登録した予約。</td></tr>
+  <tr><td>テーブル列(夕食のみ)</td><td>割り当てた卓番号。クリックするとテーブルアサインへ。</td></tr>
+  <tr><td>計</td><td>大人＋幼児(席のみは含めません)。</td></tr>
+  <tr><td>⚠ 赤字</td><td>アレルギー。</td></tr>
+</table>
+<p>見出しをクリックすると並べ替え(もう一度で逆順)。初期は時間順で、時間の境目に線が入ります。</p>
+
+<h3>人数を入力する(一覧から直接)</h3>
+<figure><img src="img/11_inline.png" alt=""><figcaption>人数の数字をクリックすると、その場で入力できます</figcaption></figure>
+<ol>
+  <li>大人・幼児・席のみの数字をクリックします。</li>
+  <li>数字を入れて <span class="key">Enter</span>(保存して次の行の同じ欄へ)または <span class="key">Tab</span>(右の欄へ)。<span class="key">Esc</span> で取り消し。</li>
+</ol>
+<div class="tip"><b>ヒント</b>: CSVで取り込んだ後は、大人の欄を上から順に「数字 → Enter」で続けて入力すると早く終わります。</div>
+
+<h3>予約を追加・編集する</h3>
+<figure><img src="img/12_edit.png" alt=""><figcaption>予約の編集画面(行をクリック)</figcaption></figure>
+<ul>
+  <li>「＋追加」で新しい予約、行をクリックで編集。日付は表示中の日付で登録されます。</li>
+  <li>泊数を2以上にすると、翌日以降の分も自動で登録されます(新規のみ)。</li>
+  <li>「グループ登録」: 「なし(この予約だけでグループ)」または同じ日の他の予約を選んで紐づけます。</li>
+  <li>画面の下に、登録・更新・削除の日時と担当者、変更履歴が出ます。</li>
+  <li>「削除」は取り消せます。「削除済みも表示」にチェックを入れて削除済みの行を開き、「復元」を押します。</li>
+</ul>
+
+<h3>時間を変える・入場済にする</h3>
+<ul>
+  <li>行の時間のプルダウンを変えるとすぐ保存されます。<b>テーブルを割り当て済みの予約は割り当てが外れます</b>(卓メモがあるときは確認が出ます)。</li>
+  <li>「入場済」: レストランの担当者がチェックを入れ、「はい」で確定します。取り消しも同様です。</li>
+</ul>
+
+<h3>時間枠を追加・削除する</h3>
+<figure><img src="img/13_slots.png" alt="" style="width:75%"><figcaption>「時間枠」ボタン</figcaption></figure>
+<ul>
+  <li>時刻を選んで「追加」、×で削除し、「保存する」。</li>
+  <li><b>夕食の 17:30・19:30(鍵のマーク)は削除できません</b>(CSVの⑰⑲に使うため)。</li>
+  <li>今日以降の予約で使っている時間枠は削除できません。先に予約の時間を変えてください。</li>
+</ul>
+
+<h3>印刷</h3>
+<p>「印刷」でA4横に印刷できます。削除済みの行とプルダウンは印刷されません。</p>
+
+<!-- 3 -->
+<h2>3. CSVアップロード(宿泊者リストの取り込み)</h2>
+<p>フロント・管理者が、上部バーの「アップロード」から宿泊者リストを取り込みます。</p>
+<figure><img src="img/20_upload.png" alt=""><figcaption>アップロード画面(2つのファイルを選んだところ)</figcaption></figure>
+<h3>手順</h3>
+<ol>
+  <li>「アップロード」を押し、①予約ファイル と ②部屋割りファイル の2つを選びます(ドラッグ＆ドロップ可。1つずつでも、同時でも、順番も問いません)。</li>
+  <li>ファイルの種類は自動で判定されます(緑の「①予約」「②部屋割り」)。2つそろわないと取り込めません。</li>
+  <li>件数(夕食の時間別・朝食・更新・取消など)を確認し、「取り込む」を押します。</li>
+</ol>
+<h3>取り込みのルール</h3>
+<table>
+  <tr><th style="width:28%">名前欄の印(「_」より後ろ)</th><th>登録のされ方</th></tr>
+  <tr><td>⑰</td><td>夕食 17:30</td></tr>
+  <tr><td>⑲</td><td>夕食 19:30</td></tr>
+  <tr><td>DN(⑰⑲なし)</td><td>夕食・時間未定</td></tr>
+  <tr><td>BF</td><td>朝食(時間はすべて未定)</td></tr>
+</table>
+<ul>
+  <li>夕食はチェックイン日〜チェックアウト前日、朝食はチェックイン翌日〜チェックアウト日。<b>今日より前の日付は登録しません</b>。</li>
+  <li>1つの予約の複数の部屋は1件にまとまります(部屋番号は「, 」区切り)。②に部屋がない予約は「未割当」。</li>
+  <li>人数は0で登録されます(管理表で入力してください)。代表者名は「_」より前の部分です。</li>
+  <li>同じファイルを取り込み直しても、手で入れた時間・人数・アレルギー・備考は上書きされません(部屋番号・名前・泊数だけ更新)。</li>
+</ul>
+<div class="note"><b>要確認の表示</b>: 以前取り込んだ予約が取消になった・対象外になった場合は、自動では削除せず「要確認」に一覧で出ます。リンクから管理表を開いて、必要なら削除してください。</div>
+
+<!-- 4 -->
+<h2>4. テーブルアサイン</h2>
+<p>夕食の予約をレストランの卓に割り当てる画面です。左が見取り図、右が予約の一覧です。上で日付と時間枠を切り替えます(時間枠のボタンの「2/3組」は、全員が卓に座った組数/予約数)。</p>
+<figure><img src="img/30_tables.png" alt=""><figcaption>テーブルアサイン(19:30)</figcaption></figure>
+
+<h3>予約を卓に割り当てる</h3>
+<ol>
+  <li>右の「未アサイン」(左にオレンジの帯)から予約をクリックして選び、見取り図の卓をクリックします。パソコンでは予約カードを卓へドラッグ＆ドロップしてもかまいません。</li>
+  <li><b>卓には空席の分だけ座ります</b>(大人→幼児→席のみの順)。満席の卓には割り当てられません。</li>
+  <li>座りきれない人数は「残り○名」として未アサインに残り、予約は選んだままです。続けて次の卓をクリックしてください。全員が座ると「アサイン済」に移ります。</li>
+</ol>
+<table>
+  <tr><th style="width:30%">卓の表示</th><th>意味</th></tr>
+  <tr><td>青い卓</td><td>割り当てあり(部屋番号・大/幼/席の人数)</td></tr>
+  <tr><td>緑の卓・✓</td><td>全員が入場済(一部なら緑の点線と(✓))</td></tr>
+  <tr><td>赤い枠・赤い人数</td><td>人数が席数を超えている</td></tr>
+  <tr><td>人数未入力 / +未</td><td>大人0人の予約(人数を入れるまで席数の判定ができません)</td></tr>
+  <tr><td>📝お子様用の</td><td>卓メモの冒頭5文字</td></tr>
+  <tr><td>⚠</td><td>アレルギーのある予約</td></tr>
+</table>
+
+<h3>割り当て済みの卓をクリックすると</h3>
+<figure><img src="img/31_table_modal.png" alt=""><figcaption>卓の画面</figcaption></figure>
+<ul>
+  <li><b>別の卓へ移動</b>: 押してから移動先の卓をクリック。移動先の空席が足りないと移動できません。</li>
+  <li><b>卓を追加</b>: 同じ予約を別の卓にも座らせます。</li>
+  <li><b>外す</b>: この卓から外します(卓メモも消えるので確認が出ます)。</li>
+  <li><b>この卓の人数</b>: 大人・幼児・席のみの内訳を変えて「人数を保存」。席数と予約の人数を超えられません。減らした人数は未アサインに戻ります。</li>
+  <li><b>卓メモ</b>: 入力して「メモを保存」。卓の上に冒頭5文字が表示されます。<b>内容はこのページでしか見られません</b>。卓を移動してもメモは引き継がれ、外すと消えます。</li>
+  <li>相席の卓では「この卓の全員を移動」も使えます。卓をドラッグしても全員を移動できます。</li>
+</ul>
+<div class="note"><b>注意</b>: 管理表で予約の時間を変えたり削除したりすると、割り当てと卓メモは外れます。人数を減らすと後ろの卓から自動で減り、増やすと増えた分が未アサインに戻ります。</div>
+
+<h3>配置を編集する(管理者・レストラン)</h3>
+<figure><img src="img/32_layout_edit.png" alt=""><figcaption>配置の編集(卓9・10を選択中)</figcaption></figure>
+<ul>
+  <li>「配置を編集」を押し、「この日の配置」か「基本レイアウト」を選びます。基本レイアウトは、配置を変えていない日とこれから割り当てる日に使われます。</li>
+  <li>卓をクリックで選択(複数可)、ドラッグで移動。右側で卓番号・席数を変えられます。</li>
+  <li>卓の追加(2・4・6名)、削除、<b>連結</b>(選んだ卓を1つに)・連結を解除、前日の配置をコピー、基本に戻す。</li>
+  <li>位置合わせ: ドラッグ中に他の卓と端・中心がそろうと赤い点線が出て吸い付きます(<span class="key">Alt</span> を押しながらで吸い付かない)。「高さを揃える」「横位置を揃える」「横に等間隔」「縦に等間隔」、矢印キーで微調整(<span class="key">Shift</span> で10ずつ)。</li>
+  <li>最後に「保存」。やめるときは「キャンセル」。</li>
+</ul>
+
+<!-- 5 -->
+<h2>5. 夕食集計・朝食集計</h2>
+<figure><img src="img/40_summary.png" alt=""><figcaption>夕食集計</figcaption></figure>
+<ul>
+  <li>期間を指定して、日ごとの組数・大人・幼児・席のみ・計・入場済(組)を集計します(初期は今月、最長1年)。</li>
+  <li>2行目が合計。土曜は青、日曜は赤。日付をクリックするとその日の管理表を開きます。</li>
+  <li>「印刷」(A4横)と「Excel」で出力できます。削除済みの予約は含みません。</li>
+</ul>
+
+<!-- 6 -->
+<h2>6. チャット</h2>
+<figure><img src="img/50_chat.png" alt=""><figcaption>チャット</figcaption></figure>
+<ul>
+  <li>全員共通のチャットです。<span class="key">Enter</span> で送信、<span class="key">Shift</span>+<span class="key">Enter</span> で改行。</li>
+  <li>自分の発言は右(青)、相手の発言は左にロールの印付きで表示。読まれると「既読 レストラン」のように出ます。</li>
+  <li>人のアイコンのボタンで、予約(お客様)を紐づけて送れます。受け取った人はカードをクリックすると管理表の該当行が開きます。</li>
+  <li>自分の発言は取り消せます(「メッセージの送信を取り消しました」と表示)。</li>
+</ul>
+
+<!-- 7 -->
+<h2>7. 操作ログ</h2>
+<figure><img src="img/60_logs.png" alt=""><figcaption>操作ログ</figcaption></figure>
+<ul>
+  <li>誰が・いつ・何をしたかを新しい順に表示します(予約の登録・変更・削除・入場済・CSV取込・テーブル、チャット、ログイン)。</li>
+  <li>期間(初期は今日、最長93日)・種類・キーワードで絞り込めます。ログインの失敗は赤い行です。</li>
+  <li>予約の行の対象をクリックすると管理表の該当行が開きます。卓メモは「卓メモを変更」とだけ記録され、内容は出ません。</li>
+</ul>
+
+<!-- 8 -->
+<h2>8. 管理者ページ</h2>
+<figure><img src="img/70_admin.png" alt=""><figcaption>管理者ページ</figcaption></figure>
+<ul>
+  <li><b>ユーザー管理</b>: ユーザーの追加、表示名・ロールの変更、有効/無効、パスワードの再設定。自分自身のロール変更・無効化はできません。developer のアカウントは developer だけが操作できます。</li>
+  <li><b>時間枠設定</b>: 夕食・朝食の時間枠(管理表の「時間枠」ボタンと同じ)。</li>
+</ul>
+
+<!-- 9 -->
+<h2>9. 困ったときは</h2>
+<table>
+  <tr><th style="width:38%">こんなとき</th><th>こうしてください</th></tr>
+  <tr><td>画面が古いまま・ボタンが見当たらない</td><td>ブラウザを再読み込み(<span class="key">F5</span>)してください。画面は30秒ごとに自動で更新されます。</td></tr>
+  <tr><td>急にログイン画面になった</td><td>ログインの有効期限(12時間)が切れました。もう一度ログインしてください。</td></tr>
+  <tr><td>予約を間違えて削除した</td><td>「削除済みも表示」→ 行を開いて「復元」。テーブルの割り当てと卓メモは戻りません。</td></tr>
+  <tr><td>卓に割り当てられない</td><td>満席、または時間未定の予約です。空いている卓を選ぶか、管理表で時間を決めてください。</td></tr>
+  <tr><td>予約が未アサインから消えない</td><td>まだ座っていない人数(残り○名)があります。次の卓に割り当ててください。</td></tr>
+  <tr><td>ピンクの行がある</td><td>大人が0人(人数未入力)です。人数を入力してください。</td></tr>
+  <tr><td>CSVの「取り込む」が押せない</td><td>①予約と②部屋割りの両方を選んでください。</td></tr>
+  <tr><td>時間枠を削除できない</td><td>17:30・19:30は削除できません。他の枠は、今日以降の予約の時間を変えてから削除してください。</td></tr>
+  <tr><td>パスワードを忘れた</td><td>管理者に「パスワード再設定」を依頼してください。</td></tr>
+</table>
+
+</body>
+</html>
