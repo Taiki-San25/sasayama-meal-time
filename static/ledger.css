@@ -51,6 +51,7 @@ body.dayFuture{background:rgba(227,238,250,.5)}
 .entBadge i{font-size:13px}
 .ledgerTable tbody tr.deleted .entBadge{background:#e6e6e6;color:#999}
 .ledgerTable td.room{font-weight:700;white-space:nowrap}
+.ledgerTable td.resvNo{white-space:nowrap;color:#555;font-variant-numeric:tabular-nums}
 .ledgerTable td{white-space:nowrap}
 .ledgerTable td.empty{white-space:normal}
 .ledgerTable td.note,.ledgerTable td.allergyCell{white-space:pre-wrap;min-width:160px}

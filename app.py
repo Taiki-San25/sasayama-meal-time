@@ -274,7 +274,16 @@ def to_dict(r: Reservation, names: dict[int, str]) -> dict:
         "deleted": r.deleted_at is not None,
         "entered_by": names.get(r.entered_by, ""),
         "deleted_at": iso(r.deleted_at), "deleted_by": names.get(r.deleted_by, ""),
+        "resv_no": resv_no(r.ext_key),
     }
+
+
+def resv_no(ext_key: str | None) -> str:
+    """CSV取込元の予約番号。枝番0は省き、それ以外は「24472-2」"""
+    if not ext_key:
+        return ""
+    no, _, branch = ext_key.partition("-")
+    return no if branch in ("", "0") else ext_key
 
 
 def user_names(db: Session) -> dict[int, str]:

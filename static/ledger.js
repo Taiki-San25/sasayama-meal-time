@@ -19,6 +19,7 @@
   const COLUMNS = [
     { key: 'time', label: '時間', val: r => r.time_slot || '' },
     { key: 'status', label: 'ステータス', val: r => (r.entered_at ? 1 : 0) },
+    { key: 'resv_no', label: '予約番号', val: byText('resv_no') },
     { key: 'room', label: '部屋', val: byText('room') },
     { key: 'guest_name', label: '代表者名', val: byText('guest_name') },
     { key: 'nights', label: '泊数', val: r => r.nights * 100 + r.night_no },
@@ -51,7 +52,7 @@
         <button class="iconBtn" data-act="next" aria-label="翌日"><i class="ti ti-chevron-right"></i></button>
         <button class="btn" data-act="today">今日</button>
       </div>
-      <input type="search" id="ldSearch" placeholder="部屋・名前・備考で検索" aria-label="検索">
+      <input type="search" id="ldSearch" placeholder="予約番号・部屋・名前・備考で検索" aria-label="検索">
       <label class="delToggle"><input type="checkbox" id="ldShowDeleted">削除済みも表示</label>
       <div class="barRight">
         <button class="btn" data-act="print"><i class="ti ti-printer"></i>印刷</button>
@@ -146,7 +147,7 @@
   function visibleRows() {
     const q = state.q.trim().toLowerCase();
     let rows = state.rows;
-    if (q) rows = rows.filter(r => [r.room, r.guest_name, r.allergy, r.note].some(v => v.toLowerCase().includes(q)));
+    if (q) rows = rows.filter(r => [r.resv_no || '', r.room, r.guest_name, r.allergy, r.note].some(v => v.toLowerCase().includes(q)));
     const col = COLUMNS.find(c => c.key === state.sort.key);
     const { dir } = state.sort;
     const cmp = (x, y) => typeof x === 'number' ? x - y : x.localeCompare(y, 'ja', { numeric: true });
@@ -210,7 +211,7 @@
     const rows = visibleRows();
     const tbody = $('ldBody');
     if (!rows.length) {
-      tbody.innerHTML = `<tr><td colspan="12" class="empty">${state.rows.length ? '該当する予約はありません' : 'この日の予約はまだありません。「追加」から登録してください。'}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="${COLUMNS.length}" class="empty">${state.rows.length ? '該当する予約はありません' : 'この日の予約はまだありません。「追加」から登録してください。'}</td></tr>`;
       return;
     }
     let prevSlot = null;
@@ -225,6 +226,7 @@
           : `<select class="slotSel" aria-label="時間">${slotOptions(r.time_slot)}</select>
           <span class="printOnly">${r.time_slot || '未定'}</span>`}</td>
         <td class="status">${statusCell(r)}</td>
+        <td class="resvNo">${esc(r.resv_no || '')}</td>
         <td class="room">${roomLabel(r.room)}${groupTag(groups[r.group_id])}</td>
         <td class="guest">${esc(r.guest_name)}</td>
         <td class="nights">${nightsLabel(r)}</td>
@@ -284,7 +286,7 @@
       body: `<form class="form">
         <p class="formDate"><i class="ti ti-calendar"></i>${dateLabel(r.date)}${isNew
           ? '<span class="muted">から登録</span>'
-          : `<span class="muted">${r.nights > 1 ? `${r.nights}泊の${r.night_no}泊目` : '1泊'}</span>`}</p>
+          : `<span class="muted">${r.nights > 1 ? `${r.nights}泊の${r.night_no}泊目` : '1泊'}</span>`}${r.resv_no ? `<span class="muted">　予約番号 ${esc(r.resv_no)}</span>` : ''}</p>
         <div class="row">
           <label>時間<select name="time_slot">${slotOptions(r.time_slot)}</select></label>
           ${isNew ? '<label>泊数<input type="number" name="nights" value="1" min="1" max="30" required></label>' : ''}
@@ -394,7 +396,7 @@
       wide: true,
       body: `<div class="readonly">
         ${item('日付', r.date.replace(/-/g, '/'))}${item('時間', r.time_slot || '未定')}
-        ${item('部屋番号', r.room)}${item('代表者名', r.guest_name)}
+        ${item('予約番号', r.resv_no)}${item('部屋番号', r.room)}${item('代表者名', r.guest_name)}
         ${item('泊数', r.nights > 1 ? `${r.nights}泊(${r.night_no}泊目)` : '1泊')}
         ${item('人数', `大人${r.adults} 子供${r.children} 幼児${r.infants}(計${total(r)})`)}
         ${item('アレルギー', r.allergy)}${item('備考', r.note)}
