@@ -219,7 +219,7 @@
     tbody.innerHTML = rows.map(r => {
       const brk = state.sort.key === 'time' && prevSlot !== null && prevSlot !== (r.time_slot || UNSET);
       prevSlot = r.time_slot || UNSET;
-      const cls = [brk && 'slotBreak', !r.time_slot && !r.deleted && 'noSlot', r.deleted && 'deleted'].filter(Boolean).join(' ');
+      const cls = [brk && 'slotBreak', !r.time_slot && !r.deleted && 'noSlot', r.deleted && 'deleted', !r.deleted && !r.adults && 'noAdult'].filter(Boolean).join(' ');
       return `<tr data-id="${r.id}" class="${cls}">
         <td>${r.deleted
           ? `<span class="delBadge">削除済</span> ${r.time_slot || '未定'}`
