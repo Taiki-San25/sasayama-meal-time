@@ -180,10 +180,20 @@ window.AMT = (function () {
   const adminEls = [document.getElementById('adminHeading'), document.getElementById('adminSection')];
   adminEls.forEach(el => { el.hidden = true; });
   // チャット未読バッジ(チャットページ自身も AMT.setUnread で更新する)
+  // 前回より増えたとき(新着)だけ数秒脈打たせる。ページを移っても同じ件数なら動かさない
+  const ssGet = k => { try { return sessionStorage.getItem(k); } catch (e) { return null; } };
+  const ssSet = (k, v) => { try { sessionStorage.setItem(k, v); } catch (e) {} };
   AMT.setUnread = n => {
     const b = sidebar.querySelector('[data-badge=chat]');
-    b.textContent = n > 99 ? '99+' : n;
+    b.innerHTML = `${n > 99 ? '99+' : n}<span class="unit">件</span>`;
     b.hidden = !n;
+    const prev = Number(ssGet('chatUnreadSeen') || 0);
+    if (n > prev) {
+      b.classList.remove('pulse');
+      void b.offsetWidth;
+      b.classList.add('pulse');
+    }
+    ssSet('chatUnreadSeen', n);
   };
   const pollUnread = () => {
     if (document.hidden) return;
