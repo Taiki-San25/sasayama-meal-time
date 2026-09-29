@@ -122,4 +122,6 @@ for no, n in {"50101": 2, "50103": 3, "50107": 6}.items():
 # ---- チャット ----
 call(front, "POST", "/api/chat/messages", {"body": "本日19:30のデモツアー様、1名増の可能性ありとのことです。"})
 call(rest, "POST", "/api/chat/messages", {"body": "承知しました。卓を空けておきます。"})
+# 佐藤さん(レストラン)の画面に未読バッジが出るように、最後にフロントから1件
+call(front, "POST", "/api/chat/messages", {"body": "明朝、50103のｻﾄｳ様は7:30ご希望です。"})
 print("demo data ready")

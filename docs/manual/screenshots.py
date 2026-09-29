@@ -23,6 +23,8 @@ TAP = """const g = document.querySelector('[data-table="%s"]'); const b = g.quer
 
 async def main():
     async with Browser() as b:
+        # 未読バッジの動きが写り込まないように、動きを減らす設定で撮る
+        await b.send("Emulation.setEmulatedMedia", features=[{"name": "prefers-reduced-motion", "value": "reduce"}])
         await b.goto(f"{BASE}/login")
         await b.shot(IMG / "01_login.png")
 

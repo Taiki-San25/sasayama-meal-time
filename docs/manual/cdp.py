@@ -42,9 +42,17 @@ class Browser:
         return self
 
     async def __aexit__(self, *exc):
+        # terminate だけでは Edge が残り、次回の実行が古いブラウザにつながるので、先に Browser.close で閉じる
+        try:
+            await asyncio.wait_for(self.send("Browser.close"), 5)
+        except Exception:
+            pass
         self.reader.cancel()
         await self.ws.close()
-        self.proc.terminate()
+        try:
+            self.proc.wait(10)
+        except subprocess.TimeoutExpired:
+            self.proc.kill()
 
     async def _read(self):
         async for msg in self.ws:
