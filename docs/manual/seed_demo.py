@@ -103,6 +103,7 @@ for no in ("50101", "50102", "50107"):
 A = lambda rid, t, slot: call(rest, "POST", "/api/floor/assign", {"date": D, "time_slot": slot, "table_id": t, "reservation_id": rid})
 A(rows["50101"]["id"], "t7", "17:30")
 A(rows["50103"]["id"], "t8", "17:30")   # 5名を4名卓へ → 4名が座り、残り1名は未アサインに
+A(rows["50106"]["id"], "t9", "17:30")   # ﾔﾏﾓﾄ様(卓7)と同じグループ → 卓7・9の左下に G1
 A(rows["50102"]["id"], "t8", "19:30")
 A(rows["50107"]["id"], "t1", "19:30")   # 11名のツアー → 卓1・2・3に4・4・3名
 A(rows["50107"]["id"], "t2", "19:30")
