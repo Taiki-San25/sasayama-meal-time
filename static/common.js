@@ -95,11 +95,14 @@ window.AMT = (function () {
       { label: 'ログアウト', icon: 'ti-logout', type: 'normal', href: '/logout' }
     ],
     mainMenu: [
+      { heading: '夕食' },
       { label: '夕食時間管理表', icon: 'ti-moon', href: '/dinner' },
       { label: 'テーブルアサイン', icon: 'ti-armchair', href: '/tables' },
       { label: '夕食集計', icon: 'ti-chart-bar', href: '/dinner-summary' },
+      { heading: '朝食' },
       { label: '朝食時間管理表', icon: 'ti-sun', href: '/breakfast' },
       { label: '朝食集計', icon: 'ti-chart-bar', href: '/breakfast-summary' },
+      { heading: '共通' },
       { label: 'チャット', icon: 'ti-messages', href: '/chat', badgeKey: 'chat' },
       { label: '操作ログ', icon: 'ti-list-details', href: '/logs' },
       { label: '操作説明', icon: 'ti-book', href: '/manual' }
@@ -119,6 +122,7 @@ window.AMT = (function () {
 
   const path = location.pathname.replace(/\/$/, '') || '/';
   const navRow = (it, admin) => {
+    if (it.heading) return `<div class="navCat"><span class="lbl">${esc(it.heading)}</span></div>`;
     const active = path === it.href;
     return `<a class="navRow${admin ? ' adminPage' : ''}${active ? ' navRowActive' : ''}" href="${it.href}">
       <i class="ti ${it.icon}"></i><span class="lbl">${esc(it.label)}</span>
