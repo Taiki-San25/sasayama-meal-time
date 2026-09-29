@@ -145,18 +145,9 @@
     : (v === '' || v === null ? '(空欄)' : String(v));
 
   // グループ: この日の有効な予約のグループ(単体を含む)に G1, G2… を振る(時間→部屋順)
-  function groupInfo() {
-    const members = {};
-    active().filter(r => r.group_id).forEach(r => (members[r.group_id] = members[r.group_id] || []).push(r));
-    const order = r => (r.time_slot || '99:99') + '|' + r.room.padStart(8, '0');
-    const groups = Object.entries(members)
-      .map(([id, ms]) => [id, ms.sort((a, b) => order(a).localeCompare(order(b)))])
-      .sort(([, a], [, b]) => order(a[0]).localeCompare(order(b[0])));
-    return Object.fromEntries(groups.map(([id, ms], i) => [id, { no: i + 1, members: ms }]));
-  }
-  const GROUP_COLORS = 10;  // グループ色の数(ledger.css の .grpTag.g0〜g9)。超えると同じ色を繰り返す
+  const groupInfo = () => AMT.groupInfo(active());
   const groupTag = (g, extra = '') => g
-    ? `<span class="grpTag g${(g.no - 1) % GROUP_COLORS}" title="グループ: ${esc(g.members.map(m => roomText(m.room)).join('・'))}">G${g.no}</span>${extra}`
+    ? `<span class="grpTag g${AMT.groupColor(g)}" title="グループ: ${esc(g.members.map(m => roomText(m.room)).join('・'))}">G${g.no}</span>${extra}`
     : '';
 
   function visibleRows() {

@@ -69,6 +69,7 @@
     const d = await api(`/api/floor?d=${state.date}`);
     if (seq !== loadSeq) return;
     state.data = d;
+    state.groups = AMT.groupInfo(d.reservations);  // 夕食時間管理表と同じ G1, G2…
     map.setAttribute('viewBox', `0 0 ${d.canvas.w} ${d.canvas.h}`);
     if (!d.slots.includes(state.slot)) state.slot = d.slots[0] || '';
     render();
@@ -99,6 +100,11 @@
       .map(a => names[a.table_id]).filter(Boolean);
   };
   const currentTables = () => state.edit ? state.edit.tables : state.data.tables;
+  const groupOf = r => state.groups[r.group_id];
+  const grpTag = r => {
+    const g = groupOf(r);
+    return g ? `<span class="grpTag g${AMT.groupColor(g)}" title="グループ: ${esc(g.members.map(m => roomText(m.room)).join('・'))}">G${g.no}</span>` : '';
+  };
 
   // ---------- 描画 ----------
   function render() {
@@ -128,7 +134,7 @@
     const tbl = tablesOfRes(r.id);
     const rest = seatSummary()[r.id]?.rest ?? 0;
     return `<div class="resCard${assigned ? '' : ' todo'}${state.selected === r.id ? ' sel' : ''}${r.entered_at ? ' entered' : ''}" data-rid="${r.id}" tabindex="0">
-      <div class="rcTop"><b title="${esc(r.room)}">${esc(roomText(r.room))}</b><span class="rcName">${esc(r.guest_name)}</span></div>
+      <div class="rcTop"><b title="${esc(r.room)}">${esc(roomText(r.room))}</b>${grpTag(r)}<span class="rcName">${esc(r.guest_name)}</span></div>
       <div class="rcSub">大${r.adults} 幼${r.children} 席${r.infants}
         ${r.allergy ? `<span class="rcAllergy" title="${esc(r.allergy)}"><i class="ti ti-alert-triangle"></i>アレルギー</span>` : ''}
         ${r.entered_at ? '<span class="rcEntered">入場済</span>' : ''}
@@ -202,6 +208,20 @@
     return `<text class="tMemo" x="${t.x + t.w / 2}" y="${t.y - 4}"><title>${esc(memos.join(' / '))}</title>📝${esc(head)}${memos.length > 1 ? ' 他' : ''}</text>`;
   }
 
+  // 卓の左下にグループの札(相席で複数のグループなら横に並べる)
+  function groupMark(t, rs) {
+    if (state.edit) return '';
+    const gs = [...new Set(rs.map(groupOf).filter(Boolean))].sort((a, b) => a.no - b.no);
+    let x = t.x - 4;
+    return gs.map(g => {
+      const w = g.no > 9 ? 26 : 20, y = t.y + t.h - 6;  // 下の枠線にまたがせて、人数の文字と重ならないように
+      const out = `<g class="tGrp g${AMT.groupColor(g)}"><rect x="${x}" y="${y}" width="${w}" height="14" rx="3"/>
+        <text x="${x + w / 2}" y="${y + 10.5}">G${g.no}</text></g>`;
+      x += w + 2;
+      return out;
+    }).join('');
+  }
+
   function renderMap() {
     const loads = state.edit ? {} : tableLoads();
     const sel = state.edit ? state.edit.sel : new Set();
@@ -216,11 +236,12 @@
         rs.some(r => r.id === state.selected) ? 'mine' : '', noCount ? 'noCount' : ''].filter(Boolean).join(' ');
       const rooms = rs.map(r => roomShort(r.room)).join('・');
       const allergy = rs.some(r => r.allergy);
-      const label = `卓${t.name} ${t.seats}名` + (rs.length ? ` ${rs.map(r => r.room).join('、')} 大人${o.adults} 幼児${o.children} 席のみ${o.infants}${allergy ? ' アレルギーあり' : ''}${allIn ? ' 入場済' : ''}${noCount ? ` 人数未入力${noCount}組` : ''}` : ' 空き');
+      const label = `卓${t.name} ${t.seats}名` + (rs.length ? ` ${rs.map(r => r.room).join('、')} 大人${o.adults} 幼児${o.children} 席のみ${o.infants}${allergy ? ' アレルギーあり' : ''}${rs.some(groupOf) ? ` グループ${[...new Set(rs.map(groupOf).filter(Boolean))].map(g => 'G' + g.no).join('・')}` : ''}${allIn ? ' 入場済' : ''}${noCount ? ` 人数未入力${noCount}組` : ''}` : ' 空き');
       return `<g class="${cls}" data-table="${t.id}" tabindex="0" role="button" aria-label="${esc(label)}">
         <title>${esc(label)}</title>
         <rect x="${t.x}" y="${t.y}" width="${t.w}" height="${t.h}" rx="6"/>
         ${memoTag(t)}
+        ${groupMark(t, rs)}
         <text class="tName" x="${t.x + 5}" y="${t.y + 14}">${esc(t.name)}${allIn ? '<tspan class="tIn"> ✓</tspan>' : someIn ? '<tspan class="tIn"> (✓)</tspan>' : ''}</text>
         <text class="tSeats" x="${t.x + t.w - 4}" y="${t.y + 14}">${t.seats}名</text>
         ${rs.length ? `<text class="tRoom" x="${t.x + t.w / 2}" y="${t.y + 33}">${esc(fit(rooms, t.w))}</text>
@@ -293,7 +314,7 @@
         ${people(o) > t.seats ? `<p class="overTxt"><i class="ti ti-alert-triangle"></i>人数(${people(o)}名)が席数(${t.seats}名)を超えています</p>` : ''}
         ${rs.map(r => `<div class="tiRow">
           <div class="tiHead">
-            <div class="tiWho"><b>${esc(roomText(r.room))}</b><span>${esc(r.guest_name)}${r.guest_name ? ' 様' : ''}</span>
+            <div class="tiWho"><b>${esc(roomText(r.room))}</b>${grpTag(r)}<span>${esc(r.guest_name)}${r.guest_name ? ' 様' : ''}</span>
               ${r.entered_at ? '<span class="rcEntered">入場済</span>' : ''}</div>
             <div class="tiBtns">
               <button type="button" class="btn" data-ti="move" data-rid="${r.id}"><i class="ti ti-arrows-move"></i>別の卓へ移動</button>

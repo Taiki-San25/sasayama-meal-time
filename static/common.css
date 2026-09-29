@@ -144,6 +144,19 @@ body.sbCollapsed #mainContent{margin-left:60px}
 }
 
 /* ---------- 共通部品 ---------- */
+/* グループバッジ(夕食・朝食の管理表、テーブルアサイン) */
+.grpTag{display:inline-block;margin-left:6px;padding:0 6px;border-radius:4px;font-size:11px;font-weight:700;
+  line-height:18px;vertical-align:1px;text-decoration:none}
+.grpTag.g0{background:#e3effc;color:#185fa5}
+.grpTag.g1{background:#e6f4ea;color:#2e7d32}
+.grpTag.g2{background:#fdf0e1;color:#a55a00}
+.grpTag.g3{background:#f3e8fb;color:#7b3fa6}
+.grpTag.g4{background:#fde8ec;color:#b3264a}
+.grpTag.g5{background:#e4f5f5;color:#1d7373}
+.grpTag.g6{background:#fdf6d3;color:#7d6400}
+.grpTag.g7{background:#e8eafc;color:#3949ab}
+.grpTag.g8{background:#f3ebe4;color:#7a4a26}
+.grpTag.g9{background:#eef5dc;color:#55700f}
 [hidden]{display:none !important}
 .pageHead{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 12px}
 .pageHead h1{font-size:18px;margin:0}

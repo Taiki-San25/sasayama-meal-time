@@ -79,7 +79,21 @@ window.AMT = (function () {
     .replace(/[ぁ-ゖ]/g, c => String.fromCharCode(c.charCodeAt(0) + 0x60))
     .replace(/\s+/g, '').toLowerCase();
 
-  return { esc, api, toast, modal, normSearch, isModalOpen: () => !!document.querySelector('.modalWrap') };
+  // グループ: その日の有効な予約のグループ(単体を含む)に G1, G2… を振る(時間→部屋順)。
+  // 夕食・朝食の管理表とテーブルアサインで同じ番号・色になるよう共通にしている
+  const groupInfo = rows => {
+    const members = {};
+    rows.filter(r => r.group_id).forEach(r => (members[r.group_id] = members[r.group_id] || []).push(r));
+    const order = r => (r.time_slot || '99:99') + '|' + r.room.padStart(8, '0');
+    const groups = Object.entries(members)
+      .map(([id, ms]) => [id, ms.sort((a, b) => order(a).localeCompare(order(b)))])
+      .sort(([, a], [, b]) => order(a[0]).localeCompare(order(b[0])));
+    return Object.fromEntries(groups.map(([id, ms], i) => [id, { no: i + 1, members: ms }]));
+  };
+  const GROUP_COLORS = 10;  // グループ色の数(common.css の .grpTag.g0〜g9)。超えると同じ色を繰り返す
+  const groupColor = g => (g.no - 1) % GROUP_COLORS;
+
+  return { esc, api, toast, modal, normSearch, groupInfo, groupColor, isModalOpen: () => !!document.querySelector('.modalWrap') };
 })();
 
 /* common.js — 上部バー・サイドバーを生成し、body直下の要素を #mainContent に移す */

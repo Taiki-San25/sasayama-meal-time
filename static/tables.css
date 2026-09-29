@@ -87,6 +87,19 @@ body.dragging,body.dragging *{cursor:grabbing !important}
   .flBody{grid-template-columns:1fr}
   .flList{max-height:260px}
 }
+/* 卓の左下のグループの札(色は .grpTag の文字色と同じ) */
+.tGrp{pointer-events:none}
+.tGrp text{font-size:10px;font-weight:700;fill:#fff;text-anchor:middle}
+.tGrp.g0 rect{fill:#185fa5}
+.tGrp.g1 rect{fill:#2e7d32}
+.tGrp.g2 rect{fill:#a55a00}
+.tGrp.g3 rect{fill:#7b3fa6}
+.tGrp.g4 rect{fill:#b3264a}
+.tGrp.g5 rect{fill:#1d7373}
+.tGrp.g6 rect{fill:#7d6400}
+.tGrp.g7 rect{fill:#3949ab}
+.tGrp.g8 rect{fill:#7a4a26}
+.tGrp.g9 rect{fill:#55700f}
 @media print{
   @page{size:A4 landscape;margin:10mm}
   body.dayPast,body.dayFuture{background:#fff}
@@ -108,6 +121,7 @@ body.dragging,body.dragging *{cursor:grabbing !important}
 .tiHead{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
 .tiWho{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;font-size:15px}
 .tiWho b{font-size:16px}
+.rcTop .grpTag,.tiWho .grpTag{margin-left:0}
 .tiBtns{display:flex;gap:6px;flex-wrap:wrap}
 .tiBtns .btn{height:30px;padding:0 10px;font-size:12px}
 .tiFacts{display:flex;flex-wrap:wrap;gap:4px 16px;margin:6px 0 4px;font-size:13px;color:#555}
