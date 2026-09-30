@@ -846,6 +846,7 @@ def reconcile_tables(db: Session, r: Reservation, user: User) -> None:
     if not rows:
         return
     before = reservation_tables(db, r.date).get(r.id, [])
+    placeholders = [a for a in rows if not people_of(a)]  # 人数未入力のまま置いた卓など、0名の割り当て
     for k in COUNT_KEYS:
         excess = sum(getattr(a, k) or 0 for a in rows) - getattr(r, k)
         for a in reversed(rows):
@@ -855,8 +856,22 @@ def reconcile_tables(db: Session, r: Reservation, user: User) -> None:
             setattr(a, k, (getattr(a, k) or 0) - cut)
             excess -= cut
     if people_of(r):
+        # 0名で置いてあった卓には、人数が入ったら空席の分だけ座らせる(外すと卓メモまで消えてしまうため)
+        rest = remaining_of(r, rows)
+        tables = {t["id"]: t for t in effective_tables(db, r.date)[0]}
+        for a in placeholders:
+            t = tables.get(a.table_id)
+            if not t:
+                continue
+            free = t["seats"] - table_used(db, r.date, a.time_slot, a.table_id, {a.id})
+            for k in COUNT_KEYS:
+                take = max(0, min(rest[k], free))
+                setattr(a, k, take)
+                rest[k] -= take
+                free -= take
+        # 人数を減らした結果0名になった卓だけ外す(空席が無くて座れなかった0名の割り当ては残す)
         for a in rows:
-            if not people_of(a):
+            if not people_of(a) and a not in placeholders:
                 db.delete(a)
     db.flush()
     record_tables(db, r, user, before)
@@ -888,6 +903,8 @@ def floor_assign(body: AssignIn, user: User = Depends(current_user), db: Session
     rest = remaining_of(r, rows)
     take = dict.fromkeys(COUNT_KEYS, 0)
     t = table_info(db, body.date, body.table_id)
+    if here and (people_of(r) == 0 or not sum(rest.values())):  # 同じ卓に置き直した(二度押しなど)は何もしない
+        return {"ok": True, "table": t["name"], "taken": 0, "remaining": 0}
     if people_of(r) == 0:  # 人数未入力の予約は1卓だけ(人数0で)置ける
         if rows:
             raise HTTPException(400, "人数が未入力の予約は1つの卓にしか割り当てられません")
@@ -1005,7 +1022,8 @@ def floor_counts(body: TableCountsIn, user: User = Depends(current_user), db: Se
     r = db.get(Reservation, a.reservation_id)
     new = body.counts.model_dump()
     t = table_info(db, body.date, body.table_id)
-    if sum(new.values()) + table_used(db, body.date, body.time_slot, body.table_id, {a.id}) > t["seats"]:
+    # 席数を超える増やし方はできない(配置の変更で席数が減って超えている卓でも、減らすことはできる)
+    if sum(new.values()) > people_of(a) and             sum(new.values()) + table_used(db, body.date, body.time_slot, body.table_id, {a.id}) > t["seats"]:
         raise HTTPException(400, f"卓{t['name']}の席数({t['seats']}名)を超えます")
     others = [x for x in reservation_rows(db, r) if x.id != a.id]
     labels = {"adults": "大人", "children": "幼児", "infants": "席のみ"}

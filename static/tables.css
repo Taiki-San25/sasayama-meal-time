@@ -45,7 +45,7 @@ body.dayFuture{background:rgba(227,238,250,.5)}
 
 .flMapWrap{background:#fff;border:1px solid #e3e3e3;border-radius:10px;padding:8px}
 /* 説明文の長さが変わっても見取り図が上下に動かないよう、3行分の高さを確保 */
-.flHint{margin:0 0 6px;font-size:12px;line-height:1.5;color:#666;height:4.5em;overflow:hidden}
+.flHint{margin:0 0 6px;font-size:12px;line-height:1.5;color:#666;min-height:4.5em}
 .flMap{display:block;width:100%;height:auto;user-select:none;-webkit-user-select:none}
 .flMap .wall{fill:none;stroke:#9aa5b1;stroke-width:3}
 .flMap .wall.thin{stroke-width:1.5}

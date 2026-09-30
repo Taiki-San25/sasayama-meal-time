@@ -33,7 +33,8 @@ window.AMT = (function () {
 
   // buttons: [{label, primary, danger, left, onClick}] — onClick が false を返すか例外なら閉じない
   // onClose: 閉じ方に関わらず閉じたときに1回呼ばれる
-  function modal({ title, body, buttons = [], wide, onClose }) {
+  // noFocus: 開いたときに入力欄へフォーカスしない(タブレットで数字キーボードが勝手に出ないように)
+  function modal({ title, body, buttons = [], wide, onClose, noFocus }) {
     const wrap = document.createElement('div');
     wrap.className = 'modalWrap';
     wrap.innerHTML = `<div class="modal${wide ? ' wide' : ''}" role="dialog" aria-modal="true">
@@ -68,7 +69,7 @@ window.AMT = (function () {
     const form = wrap.querySelector('form');
     if (form) form.addEventListener('submit', e => { e.preventDefault(); foot.querySelector('.primary')?.click(); });
     document.body.appendChild(wrap);
-    wrap.querySelector('input,select,textarea')?.focus();
+    if (!noFocus) wrap.querySelector('input,select,textarea')?.focus();
     wrap.close = close;
     return wrap;
   }
@@ -197,17 +198,19 @@ window.AMT = (function () {
   // 前回より増えたとき(新着)だけ数秒脈打たせる。ページを移っても同じ件数なら動かさない
   const ssGet = k => { try { return sessionStorage.getItem(k); } catch (e) { return null; } };
   const ssSet = (k, v) => { try { sessionStorage.setItem(k, v); } catch (e) {} };
+  let seenMem = 0;  // sessionStorage が使えないブラウザ用(毎回の確認で脈打たないように)
   AMT.setUnread = n => {
     const b = sidebar.querySelector('[data-badge=chat]');
     b.innerHTML = `${n > 99 ? '99+' : n}<span class="unit">件</span>`;
     b.hidden = !n;
-    const prev = Number(ssGet('chatUnreadSeen') || 0);
+    const prev = Number(ssGet('chatUnreadSeen') ?? seenMem);
     if (n > prev) {
       b.classList.remove('pulse');
       void b.offsetWidth;
       b.classList.add('pulse');
     }
     ssSet('chatUnreadSeen', n);
+    seenMem = n;
   };
   const pollUnread = () => {
     if (document.hidden) return;

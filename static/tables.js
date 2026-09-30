@@ -70,6 +70,11 @@
     if (seq !== loadSeq) return;
     state.data = d;
     state.groups = AMT.groupInfo(d.reservations);  // 夕食時間管理表と同じ G1, G2…
+    // 他の端末で削除・時間変更された予約や、外された卓を選んだままにしない
+    const here = d.reservations.filter(r => r.time_slot === state.slot).map(r => r.id);
+    if (state.selected && !here.includes(state.selected)) state.selected = null;
+    if (state.moveFrom && !d.assignments.some(a => a.time_slot === state.slot && a.table_id === state.moveFrom.table
+      && (state.moveFrom.rid == null || a.reservation_id === state.moveFrom.rid))) state.moveFrom = null;
     map.setAttribute('viewBox', `0 0 ${d.canvas.w} ${d.canvas.h}`);
     if (!d.slots.includes(state.slot)) state.slot = d.slots[0] || '';
     render();
@@ -316,11 +321,19 @@
       return assign(state.selected, tableId).catch(() => {});
     }
     if (!rs.length) return toast('先に右の一覧から予約を選んでください');
+    showTable(tableId);
+  }
+
+  // 卓の画面(人数・卓メモ)。keep: 開き直すときに残す、保存していない卓メモの入力 {予約ID: 文字}
+  function showTable(tableId, keep = {}) {
+    const rs = resAt(tableId);
+    if (!rs.length) return;
     const t = currentTables().find(x => x.id === tableId);
     const o = tableLoads()[tableId];
     const m = modal({
       title: `卓 ${t.name}(${t.seats}名)`,
       wide: true,
+      noFocus: true,
       body: `<div class="tblInfo">
         ${people(o) > t.seats ? `<p class="overTxt"><i class="ti ti-alert-triangle"></i>人数(${people(o)}名)が席数(${t.seats}名)を超えています</p>` : ''}
         ${rs.map(r => `<div class="tiRow">
@@ -329,7 +342,8 @@
               ${r.entered_at ? '<span class="rcEntered">入場済</span>' : ''}</div>
             <div class="tiBtns">
               <button type="button" class="btn" data-ti="move" data-rid="${r.id}"><i class="ti ti-arrows-move"></i>別の卓へ移動</button>
-              <button type="button" class="btn" data-ti="add" data-rid="${r.id}"><i class="ti ti-plus"></i>卓を追加</button>
+              ${seatSummary()[r.id]?.rest ? `<button type="button" class="btn" data-ti="add" data-rid="${r.id}"><i class="ti ti-plus"></i>卓を追加</button>`
+                : `<button type="button" class="btn" disabled title="${r.adults ? '全員が卓に座っています。別の卓にも分けるときは、先に「この卓の人数」を減らしてください' : '人数が未入力の予約は1つの卓にしか置けません'}"><i class="ti ti-plus"></i>卓を追加</button>`}
               <button type="button" class="btn danger" data-ti="remove" data-rid="${r.id}"><i class="ti ti-x"></i>外す</button>
             </div>
           </div>
@@ -345,30 +359,43 @@
       buttons: [{ label: '閉じる' }].concat(rs.length > 1
         ? [{ label: 'この卓の全員を移動', primary: true, onClick: () => { state.moveFrom = { table: tableId }; state.selected = null; render(); } }] : []),
     });
+    // 保存していない卓メモの入力(開き直しても消さない。保存済みの内容とは区別したまま入れ直す)
+    Object.entries(keep).forEach(([rid, v]) => { const el = m.querySelector(`[data-memo="${rid}"]`); if (el) el.value = v; });
+    const unsavedMemos = () => Object.fromEntries([...m.querySelectorAll('[data-memo]')]
+      .filter(x => x.value !== x.defaultValue).map(x => [+x.dataset.memo, x.value]));
+    async function saveCounts(rid) {
+      const box = m.querySelector(`.tiCounts[data-rid="${rid}"]`);
+      const counts = {};
+      for (const k of COUNT_KEYS) {
+        const v = box.querySelector(`[data-cnt="${k}"]`).value.trim(), n = Number(v);
+        if (v === '' || !Number.isInteger(n) || n < 0 || n > 99) return toast('人数は0〜99の整数で入力してください', true);
+        counts[k] = n;
+      }
+      await api('/api/floor/counts', { method: 'PUT', body: { date: state.date, time_slot: state.slot, table_id: tableId, reservation_id: rid, counts } });
+      const keep = unsavedMemos();
+      state.selected = null;  // 選んだままだと、開き直したときに減らした人数がこの卓へ自動で戻ってしまう
+      await load();
+      m.close();
+      const s = seatSummary()[rid];
+      toast(s && s.rest ? `保存しました(未割り当て ${s.rest}名は未アサインに残ります)` : '保存しました');
+      showTable(tableId, keep);  // 新しい人数で開き直す(他の端末で外されていたら開かない)
+    }
+    async function saveMemo(rid) {
+      const el = m.querySelector(`[data-memo="${rid}"]`), memo = el.value;
+      await api('/api/floor/memo', { method: 'PUT', body: { date: state.date, time_slot: state.slot, table_id: tableId, reservation_id: rid, memo } });
+      el.defaultValue = memo;
+      toast(memo.trim() ? 'メモを保存しました' : 'メモを消しました');
+      await load();
+    }
     m.querySelector('.tblInfo').addEventListener('click', async e => {
       const b = e.target.closest('[data-ti]');
       if (!b) return;
       const rid = +b.dataset.rid;
-      if (b.dataset.ti === 'counts') {
-        const box = m.querySelector(`.tiCounts[data-rid="${rid}"]`);
-        const counts = {};
-        for (const k of COUNT_KEYS) {
-          const v = box.querySelector(`[data-cnt="${k}"]`).value.trim(), n = Number(v);
-          if (v === '' || !Number.isInteger(n) || n < 0 || n > 99) return toast('人数は0〜99の整数で入力してください', true);
-          counts[k] = n;
-        }
-        await api('/api/floor/counts', { method: 'PUT', body: { date: state.date, time_slot: state.slot, table_id: tableId, reservation_id: rid, counts } });
-        await load();
-        m.close();
-        const s = seatSummary()[rid];
-        toast(s && s.rest ? `保存しました(未割り当て ${s.rest}名は未アサインに残ります)` : '保存しました');
-        return onTableClick(tableId);  // 新しい人数で開き直す
-      }
-      if (b.dataset.ti === 'memo') {
-        const memo = m.querySelector(`[data-memo="${rid}"]`).value;
-        await api('/api/floor/memo', { method: 'PUT', body: { date: state.date, time_slot: state.slot, table_id: tableId, reservation_id: rid, memo } });
-        toast(memo.trim() ? 'メモを保存しました' : 'メモを消しました');
-        await load();
+      if (b.dataset.ti === 'counts' || b.dataset.ti === 'memo') {
+        if (b.disabled) return;
+        b.disabled = true;  // 二度押しで二重に送ったり、画面が2枚開いたりしないように
+        try { await (b.dataset.ti === 'counts' ? saveCounts(rid) : saveMemo(rid)); } catch (err) { /* toast 済み */ }
+        b.disabled = false;
         return;
       }
       if (b.dataset.ti === 'remove' && memoOf(tableId, rid) && !(await confirmDialog({

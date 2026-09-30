@@ -80,7 +80,9 @@
   }
 
   // 日付を素早く切り替えたとき、後から返ってきた古い日付の結果で上書きしないよう最新の要求だけ反映する
+  // 変更(PATCH)の結果を反映したときも loadSeq を進め、変更前に出した一覧の取得が後から返って上書きしないようにする
   let loadSeq = 0;
+  const pendingEntry = new Set();  // 入場カウンターの送信中の予約(返るまで＋−を押せない)
   async function loadRows() {
     const seq = ++loadSeq;
     const rows = await api(`/api/${MEAL}/reservations?d=${state.date}${state.showDeleted ? '&include_deleted=true' : ''}`);
@@ -296,15 +298,15 @@
 
   // 朝食のステータス: 入場した人数を＋−で数える。0=空白、途中=一部入場、全員=入場済
   function breakfastStatus(r) {
-    const total = entryTotal(r), n = entryCount(r), max = total || 1;
+    const total = entryTotal(r), n = entryCount(r), max = total || 1, busy = pendingEntry.has(r.id);
     const title = r.entered_at ? ` title="${fmtTs(r.entered_at)} ${esc(r.entered_by)}"` : '';
     const badge = r.entered_at ? `<span class="entBadge"${title}><i class="ti ti-check"></i>入場済</span>`
       : n ? `<span class="entPartial">一部入場 ${n}/${total}名</span>` : '';
     if (!ENTRY_ROLES.includes(state.role) || r.deleted) return badge;
     return `<span class="entStep${r.entered_at ? ' full' : n ? ' part' : ''}"${title}>
-      <button type="button" data-ent="-1" aria-label="入場を1人減らす" ${n ? '' : 'disabled'}>−</button>
+      <button type="button" data-ent="-1" aria-label="入場を1人減らす" ${n && !busy ? '' : 'disabled'}>−</button>
       <b>${total ? `${n}/${total}` : (n ? '済' : '未')}</b>
-      <button type="button" data-ent="1" aria-label="入場を1人増やす" ${n >= max ? 'disabled' : ''}>＋</button></span>
+      <button type="button" data-ent="1" aria-label="入場を1人増やす" ${n >= max || busy ? 'disabled' : ''}>＋</button></span>
       ${r.entered_at ? '<span class="entTag full">入場済</span>' : n ? '<span class="entTag part">一部入場</span>' : ''}`;
   }
 
@@ -590,6 +592,7 @@
     try {
       const updated = await api(`/api/${MEAL}/reservations/${id}/time`, { method: 'PATCH', body: { time_slot: e.target.value || null } });
       state.rows = state.rows.map(r => r.id === id ? updated : r);
+      loadSeq++;
       toast(`${roomText(updated.room)} を ${updated.time_slot || '未定'} に変更しました`);
     } catch (err) { /* toast 済み */ }
     render();
@@ -608,6 +611,7 @@
     try {
       const updated = await api(`/api/${MEAL}/reservations/${r.id}/entered`, { method: 'PATCH', body: { entered } });
       state.rows = state.rows.map(x => x.id === r.id ? updated : x);
+      loadSeq++;
       toast(entered ? `${roomText(r.room)} を入場済にしました` : `${roomText(r.room)} の入場済を取り消しました`);
     } catch (err) { /* toast 済み */ }
     render();
@@ -616,12 +620,16 @@
     const step = e.target.closest('[data-ent]');
     if (step) {
       const r = state.rows.find(x => x.id === +step.closest('tr').dataset.id);
+      if (!r || pendingEntry.has(r.id)) return;  // 送信中は＋−とも受け付けない(同じ値を二重に送らない)
       const count = entryCount(r) + +step.dataset.ent;
-      step.disabled = true;
+      pendingEntry.add(r.id);
+      step.closest('.entStep').querySelectorAll('button').forEach(x => { x.disabled = true; });
       try {
         const updated = await api(`/api/breakfast/reservations/${r.id}/entered_count`, { method: 'PATCH', body: { count } });
         state.rows = state.rows.map(x => x.id === r.id ? updated : x);
+        loadSeq++;
       } catch (err) { /* toast 済み */ }
+      pendingEntry.delete(r.id);
       render();
       return;
     }
@@ -660,6 +668,7 @@
           const body = Object.fromEntries(COUNT_KEYS.map(k => [k, k === key ? n : r[k]]));
           const updated = await api(`/api/${MEAL}/reservations/${id}/counts`, { method: 'PATCH', body });
           state.rows = state.rows.map(x => x.id === id ? updated : x);
+          loadSeq++;
         } catch (err) { /* toast 済み */ }
       }
       render();

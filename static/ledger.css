@@ -165,7 +165,7 @@ body.slotFiltered .summary .sumCard:not(.on):not(.total){opacity:.45}
   color:#0c447c;background:#e6f1fb;border:1px solid #b5d4f4;border-radius:8px}
 .filterNote[hidden]{display:none}
 .filterNote .btn{height:28px;padding:0 10px;font-size:12px;margin-left:auto}
-@media print{body.slotFiltered .summary .sumCard:not(.on){display:none}}
+@media print{body.slotFiltered .summary .sumCard:not(.on):not(.total){display:none}}
 /* 時間枠カードの入場バー(入場済みの組数/組数)。全員入場で背景を緑 */
 .sumCard .entBar{display:flex;height:5px;background:#eceff1;border-radius:3px;margin-top:6px;overflow:hidden}
 .sumCard .entBar i{display:block;height:100%;background:#43a047;transition:width .3s}
