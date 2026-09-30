@@ -90,6 +90,9 @@ body.dragging,body.dragging *{cursor:grabbing !important}
 /* 卓の左下のグループの札(色は .grpTag の文字色と同じ) */
 .tGrp{pointer-events:none}
 .tGrp text{font-size:10px;font-weight:700;fill:#fff;text-anchor:middle}
+.tStay{pointer-events:none}
+.tStay rect{fill:#faeeda;stroke:#ef9f27}
+.tStay text{font-size:10px;font-weight:700;fill:#633806;text-anchor:middle}
 .tGrp.g0 rect{fill:#185fa5}
 .tGrp.g1 rect{fill:#2e7d32}
 .tGrp.g2 rect{fill:#a55a00}
@@ -122,6 +125,9 @@ body.dragging,body.dragging *{cursor:grabbing !important}
 .tiWho{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;font-size:15px}
 .tiWho b{font-size:16px}
 .rcTop .grpTag,.tiWho .grpTag{margin-left:0}
+/* 2泊目以降(管理表の泊数バッジと同じ色) */
+.stayTag{display:inline-block;padding:0 6px;border-radius:4px;background:#faeeda;color:#633806;border:1px solid #ef9f27;
+  font-size:11px;font-weight:700;line-height:16px;white-space:nowrap}
 .tiBtns{display:flex;gap:6px;flex-wrap:wrap}
 .tiBtns .btn{height:30px;padding:0 10px;font-size:12px}
 .tiFacts{display:flex;flex-wrap:wrap;gap:4px 16px;margin:6px 0 4px;font-size:13px;color:#555}
