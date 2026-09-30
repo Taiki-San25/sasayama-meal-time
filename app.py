@@ -4,6 +4,7 @@ import hashlib
 import os
 import re
 import secrets
+import time
 import uuid
 from io import BytesIO
 from urllib.parse import quote
@@ -127,12 +128,34 @@ def get_db():
         yield s
 
 
+SESSION_MAX_HOURS = 12  # ログイン有効時間の上限(管理者以上は常にこの時間)
+
+
+def session_limit_hours(user: User) -> int:
+    if user.role in ADMIN_ROLES:
+        return SESSION_MAX_HOURS
+    return max(1, min(user.session_hours or SESSION_MAX_HOURS, SESSION_MAX_HOURS))
+
+
 def session_user(request: Request, db: Session) -> User | None:
+    """ログイン中のユーザー。最後の操作からユーザーごとの有効時間を過ぎていたらログアウトさせる。
+    画面の自動更新(X-Auto-Refresh: 1)は操作に数えない(開いたまま放置すると時間切れになる)"""
     uid = request.session.get("uid")
     if uid is None:
         return None
     user = db.get(User, uid)
-    return user if user and user.active else None
+    if not user or not user.active:
+        return None
+    now = int(time.time())
+    last = request.session.get("last_active")
+    if last is not None and now - last > session_limit_hours(user) * 3600:
+        request.session.clear()
+        db.add(AuthLog(user_id=user.id, username=user.username, action="session_timeout"))
+        db.commit()
+        return None
+    if last is None or request.headers.get("x-auto-refresh") != "1":
+        request.session["last_active"] = now
+    return user
 
 
 def current_user(request: Request, db: Session = Depends(get_db)) -> User:
@@ -166,6 +189,7 @@ def login(body: LoginIn, request: Request, db: Session = Depends(get_db)):
     db.commit()
     request.session.clear()
     request.session["uid"] = user.id
+    request.session["last_active"] = int(time.time())
     return {"ok": True}
 
 
@@ -1227,7 +1251,7 @@ def import_commit(body: ImportIn, user: User = Depends(import_user), db: Session
 # ---------- ユーザー管理 ----------
 def user_dict(u: User) -> dict:
     return {"id": u.id, "username": u.username, "display_name": u.display_name,
-            "role": u.role, "active": u.active}
+            "role": u.role, "active": u.active, "session_hours": session_limit_hours(u)}
 
 
 Role = Literal["developer", "admin", "front", "restaurant"]
@@ -1250,6 +1274,7 @@ class UserCreateIn(BaseModel):
     display_name: str = Field(min_length=1, max_length=64)
     password: str = Field(min_length=4, max_length=128)
     role: Role = "front"
+    session_hours: int = Field(default=SESSION_MAX_HOURS, ge=1, le=SESSION_MAX_HOURS)
 
 
 class UserUpdateIn(BaseModel):
@@ -1257,6 +1282,7 @@ class UserUpdateIn(BaseModel):
     password: str | None = Field(default=None, min_length=4, max_length=128)
     role: Role | None = None
     active: bool | None = None
+    session_hours: int | None = Field(default=None, ge=1, le=SESSION_MAX_HOURS)
 
 
 @app.get("/api/users")
@@ -1270,7 +1296,7 @@ def create_user(body: UserCreateIn, me_: User = Depends(admin_user), db: Session
     if db.scalar(select(User).where(User.username == body.username)):
         raise HTTPException(400, "そのログインIDは既に使われています")
     u = User(username=body.username, display_name=body.display_name.strip(),
-             password_hash=hash_password(body.password))
+             password_hash=hash_password(body.password), session_hours=body.session_hours)
     set_role(u, body.role)
     db.add(u)
     db.commit()
@@ -1293,6 +1319,8 @@ def update_user(uid: int, body: UserUpdateIn, me_: User = Depends(admin_user), d
         set_role(u, body.role)
     if body.active is not None:
         u.active = body.active
+    if body.session_hours is not None:
+        u.session_hours = body.session_hours
     db.commit()
     return user_dict(u)
 
@@ -1510,7 +1538,7 @@ FIELD_LABELS = {
 RES_ACTIONS = {"create": "登録", "update": "変更", "delete": "削除", "restore": "復元", "table_memo": "卓メモを変更", "table_counts": "卓の人数を変更",
                "import": "CSV取込", "import_update": "CSV取込(更新)"}
 AUTH_ACTIONS = {"login": "ログイン", "login_failed": "ログイン失敗", "logout": "ログアウト",
-                "password_change": "パスワード変更"}
+                "password_change": "パスワード変更", "session_timeout": "時間切れでログアウト"}
 LOG_MAX_DAYS = 93
 
 

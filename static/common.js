@@ -2,8 +2,10 @@
 window.AMT = (function () {
   const esc = t => String(t ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+  // opts.auto: 画面の自動更新。サーバーはこれを「操作」に数えない(ログイン有効時間は人の操作からだけ延びる)
   async function api(url, opts = {}) {
     const init = { method: opts.method || 'GET', headers: {} };
+    if (opts.auto) init.headers['X-Auto-Refresh'] = '1';
     if (opts.body !== undefined) {
       init.headers['Content-Type'] = 'application/json';
       init.body = JSON.stringify(opts.body);
@@ -214,7 +216,7 @@ window.AMT = (function () {
   };
   const pollUnread = () => {
     if (document.hidden) return;
-    AMT.api('/api/chat/unread').then(d => AMT.setUnread(d.unread)).catch(() => {});
+    AMT.api('/api/chat/unread', { auto: true }).then(d => AMT.setUnread(d.unread)).catch(() => {});
   };
   if (path !== '/chat') {
     pollUnread();

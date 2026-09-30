@@ -75,17 +75,17 @@
   const dateInput = $('ldDate');
 
   // ---------- データ ----------
-  async function loadSlots() {
-    state.slots = await api(`/api/slots/${MEAL}`);
+  async function loadSlots(auto = false) {
+    state.slots = await api(`/api/slots/${MEAL}`, { auto });
   }
 
   // 日付を素早く切り替えたとき、後から返ってきた古い日付の結果で上書きしないよう最新の要求だけ反映する
   // 変更(PATCH)の結果を反映したときも loadSeq を進め、変更前に出した一覧の取得が後から返って上書きしないようにする
   let loadSeq = 0;
   const pendingEntry = new Set();  // 入場カウンターの送信中の予約(返るまで＋−を押せない)
-  async function loadRows() {
+  async function loadRows(auto = false) {
     const seq = ++loadSeq;
-    const rows = await api(`/api/${MEAL}/reservations?d=${state.date}${state.showDeleted ? '&include_deleted=true' : ''}`);
+    const rows = await api(`/api/${MEAL}/reservations?d=${state.date}${state.showDeleted ? '&include_deleted=true' : ''}`, { auto });
     if (seq !== loadSeq) return;
     state.rows = rows;
     render();
@@ -699,9 +699,9 @@
   setInterval(() => {
     const el = document.activeElement;
     if (document.hidden || AMT.isModalOpen() || el?.classList.contains('slotSel') || el?.classList.contains('cntInput')) return;
-    loadSlots().then(loadRows).catch(() => {});
+    loadSlots(true).then(() => loadRows(true)).catch(() => {});
   }, REFRESH_MS);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden && !AMT.isModalOpen()) loadRows().catch(() => {}); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && !AMT.isModalOpen()) loadRows(true).catch(() => {}); });
   window.addEventListener('amt:imported', () => loadRows().catch(() => {}));
 
   // チャットの予約カードから来た場合(?hl=予約ID)は該当行を強調

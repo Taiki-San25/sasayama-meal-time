@@ -29,6 +29,8 @@
   .slotAdd{display:flex;gap:6px}
   .slotAdd input{width:120px;flex:none}
   .slotAdd .btn.primary{margin-left:auto}
+  .sessionInput{display:flex;align-items:center;gap:6px}
+  .sessionInput input{width:90px;flex:none;text-align:right}
 </style>
 </head>
 <body>
@@ -37,8 +39,8 @@
 <section class="section">
   <h2><i class="ti ti-users"></i>ユーザー管理<button class="btn primary" id="addUser"><i class="ti ti-user-plus"></i>ユーザー追加</button></h2>
   <div class="tableWrap"><table class="grid">
-    <thead><tr><th>ログインID</th><th>表示名</th><th>ロール</th><th>状態</th><th></th></tr></thead>
-    <tbody id="userBody"><tr><td colspan="5" class="empty">読み込み中…</td></tr></tbody>
+    <thead><tr><th>ログインID</th><th>表示名</th><th>ロール</th><th>ログイン有効時間</th><th>状態</th><th></th></tr></thead>
+    <tbody id="userBody"><tr><td colspan="6" class="empty">読み込み中…</td></tr></tbody>
   </table></div>
 </section>
 
@@ -55,6 +57,10 @@
 (function () {
   const { esc, api, toast, modal } = AMT;
   const ROLES = { developer: 'developer', admin: '管理者', front: 'フロント', restaurant: 'レストラン' };
+  // ログイン有効時間(最後の操作から)。管理者以上は12時間で固定(サーバー側でも同じ)
+  const SESSION_MAX_HOURS = 12;
+  const FIXED_SESSION_ROLES = ['developer', 'admin'];
+  const sessionText = u => FIXED_SESSION_ROLES.includes(u.role) ? `${SESSION_MAX_HOURS}時間<span class="muted">(固定)</span>` : `${u.session_hours}時間`;
   let meRole = null;
   // developer のアカウントは developer のみ作成・編集できる(サーバー側でも制限)
   const selectableRoles = () => Object.entries(ROLES).filter(([k]) => k !== 'developer' || meRole === 'developer');
@@ -69,6 +75,7 @@
         <td>${esc(u.username)}</td>
         <td>${esc(u.display_name)}${u.id === meId ? ' <span class="muted">(自分)</span>' : ''}</td>
         <td><span class="tag ${u.role}">${ROLES[u.role] || esc(u.role)}</span></td>
+        <td>${sessionText(u)}</td>
         <td>${u.active ? '有効' : '<span class="tag off">無効</span>'}</td>
         <td style="text-align:right">${u.role === 'developer' && meRole !== 'developer' ? ''
           : `<button class="btn" data-edit="${u.id}"><i class="ti ti-pencil"></i>編集</button>`}</td>
@@ -89,6 +96,10 @@
           ${selectableRoles().map(([k, v]) => `<option value="${k}"${(u ? u.role : 'front') === k ? ' selected' : ''}>${v}</option>`).join('')}
         </select></label>
         <p class="muted" style="margin:-6px 0 0;font-size:12px">管理者のみ管理者ページを利用できます。フロント・レストランは管理表とチャットを利用できます。</p>
+        <label>ログイン有効時間(最後の操作から)
+          <span class="sessionInput"><input type="number" name="session_hours" min="1" max="${SESSION_MAX_HOURS}" step="1" required inputmode="numeric"
+            value="${u ? u.session_hours : SESSION_MAX_HOURS}">時間</span></label>
+        <p class="muted" style="margin:-6px 0 0;font-size:12px">1〜${SESSION_MAX_HOURS}時間。この時間なにも操作しないとログアウトします(画面の自動更新は操作に数えません)。管理者は${SESSION_MAX_HOURS}時間で固定です。</p>
         ${isNew ? '' : `<label class="check"><input type="checkbox" name="active" ${u.active ? 'checked' : ''} ${self ? 'disabled' : ''}>有効(外すとログインできなくなります)</label>`}
       </form>`,
       buttons: [{ label: 'キャンセル' }, {
@@ -96,6 +107,7 @@
           const f = m.querySelector('form');
           if (!f.reportValidity()) return false;
           const body = { display_name: f.display_name.value, role: f.role.value };
+          if (!FIXED_SESSION_ROLES.includes(f.role.value)) body.session_hours = +f.session_hours.value;
           if (isNew) {
             body.username = f.username.value.trim();
             body.password = f.password.value;
@@ -111,6 +123,17 @@
         }
       }]
     });
+    // 管理者以上を選んでいる間は12時間で固定(入力できない)
+    const f = m.querySelector('form');
+    let ownHours = f.session_hours.value;  // 管理者に切り替えて戻したときは元の時間に戻す
+    const syncSession = () => {
+      const fixed = FIXED_SESSION_ROLES.includes(f.role.value);
+      if (fixed && !f.session_hours.disabled) ownHours = f.session_hours.value;
+      f.session_hours.disabled = fixed;
+      f.session_hours.value = fixed ? SESSION_MAX_HOURS : ownHours;
+    };
+    f.role.addEventListener('change', syncSession);
+    syncSession();
   }
 
   document.getElementById('addUser').addEventListener('click', () => userForm(null));

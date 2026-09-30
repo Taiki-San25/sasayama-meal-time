@@ -73,23 +73,23 @@
   }
 
   // ---------- データ ----------
-  async function load() {
-    const d = await api('/api/chat/messages');
+  async function load(auto = false) {
+    const d = await api('/api/chat/messages', { auto });
     const sig = JSON.stringify([d.messages, d.reads]);
     state.me = d.me;
     state.messages = d.messages;
     state.reads = d.reads;
     if (sig !== state.sig || !state.loaded) render();  // 変化が無ければ描き直さない(選択中の文字が消えないように)
     state.sig = sig;
-    markRead();
+    markRead(auto);
   }
 
-  async function markRead() {
+  async function markRead(auto = false) {
     if (document.hidden || !state.messages.length) return;
     const last = state.messages[state.messages.length - 1].id;
     if (last <= state.lastRead) return;
     state.lastRead = last;
-    const r = await api('/api/chat/read', { method: 'POST', body: { last_id: last } }).catch(() => null);
+    const r = await api('/api/chat/read', { method: 'POST', body: { last_id: last }, auto }).catch(() => null);
     if (r) AMT.setUnread(r.unread);
   }
 
@@ -199,7 +199,7 @@
   });
 
   // ---------- 更新 ----------
-  setInterval(() => { if (!document.hidden) load().catch(() => {}); }, POLL_MS);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) load().catch(() => {}); });
+  setInterval(() => { if (!document.hidden) load(true).catch(() => {}); }, POLL_MS);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) load(true).catch(() => {}); });
   load().catch(() => {});
 })();

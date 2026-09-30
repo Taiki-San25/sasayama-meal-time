@@ -60,6 +60,7 @@ class User(Base):
     role: Mapped[str] = mapped_column(String(16), default="front")  # ROLES のキー
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)  # role が ADMIN_ROLES か(旧列、同期のみ)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    session_hours: Mapped[int] = mapped_column(Integer, default=12)  # 最後の操作からログインが切れるまでの時間(管理者は12固定)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
@@ -185,6 +186,7 @@ ADDED_COLUMNS = [
     ("table_assignments", "adults", "INTEGER", None),
     ("table_assignments", "children", "INTEGER", None),
     ("table_assignments", "infants", "INTEGER", None),
+    ("users", "session_hours", "INTEGER NOT NULL DEFAULT 12", None),
     ("reservations", "ext_key", "VARCHAR(64)", "CREATE INDEX IF NOT EXISTS ix_reservations_ext_key ON reservations (ext_key)"),
 ]
 # 使わなくなって削除した列: (テーブル, 列)。起動時に残っていれば消す

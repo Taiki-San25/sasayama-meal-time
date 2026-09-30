@@ -64,9 +64,9 @@
 
   // ---------- データ ----------
   let loadSeq = 0;
-  async function load() {
+  async function load(auto = false) {
     const seq = ++loadSeq;
-    const d = await api(`/api/floor?d=${state.date}`);
+    const d = await api(`/api/floor?d=${state.date}`, { auto });
     if (seq !== loadSeq) return;
     state.data = d;
     state.groups = AMT.groupInfo(d.reservations);  // 夕食時間管理表と同じ G1, G2…
@@ -827,8 +827,8 @@
 
   // 30秒ごとに更新(編集中・操作中・モーダル表示中・タブ非表示のときは止める)
   const idle = () => !state.edit && !drag && !AMT.isModalOpen() && !document.hidden;
-  setInterval(() => { if (idle()) load().catch(() => {}); }, REFRESH_MS);
-  document.addEventListener('visibilitychange', () => { if (idle()) load().catch(() => {}); });
+  setInterval(() => { if (idle()) load(true).catch(() => {}); }, REFRESH_MS);
+  document.addEventListener('visibilitychange', () => { if (idle()) load(true).catch(() => {}); });
 
   setDate(state.date);
 })();
