@@ -120,6 +120,12 @@ for no, (a, c, i) in {"50101": (2, 0, 0), "50102": (2, 1, 0), "50103": (3, 1, 1)
 for no, n in {"50101": 2, "50103": 3, "50107": 6}.items():
     call(rest, "PATCH", f"/api/breakfast/reservations/{bf[no]['id']}/entered_count", {"count": n})
 
+# ---- 翌日の夕食: 連泊(2泊目)のｽｽﾞｷ様を卓に割り当てる(2泊目の札の写真用) ----
+dn1 = {r["resv_no"]: r for r in call(front, "GET", f"/api/dinner/reservations?d={D1}")}
+r = dn1["50102"]
+call(front, "PATCH", f"/api/dinner/reservations/{r['id']}/counts", {"adults": 2, "children": 1, "infants": 0})
+call(rest, "POST", "/api/floor/assign", {"date": D1, "time_slot": r["time_slot"], "table_id": "t8", "reservation_id": r["id"]})
+
 # ---- チャット ----
 call(front, "POST", "/api/chat/messages", {"body": "本日19:30のデモツアー様、1名増の可能性ありとのことです。"})
 call(rest, "POST", "/api/chat/messages", {"body": "承知しました。卓を空けておきます。"})
