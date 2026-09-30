@@ -1,5 +1,6 @@
 import base64
 import binascii
+import hashlib
 import os
 import re
 import secrets
@@ -97,6 +98,27 @@ async def no_stale_assets(request: Request, call_next):
     if not request.url.path.startswith("/api/"):
         response.headers.setdefault("Cache-Control", "no-cache")
     return response
+
+
+@app.middleware("http")
+async def api_etag(request: Request, call_next):
+    """一覧などの取得(GET /api/…)に ETag を付け、前回と同じ内容なら中身を送らず 304 だけ返す。
+    30秒ごとの自動更新やチャットの5秒ごとの確認で、変化がないときの通信量を減らすため(ブラウザが自動で確認する)"""
+    response = await call_next(request)
+    if (request.method != "GET" or not request.url.path.startswith("/api/") or response.status_code != 200
+            or not response.headers.get("content-type", "").startswith("application/json")):
+        return response
+    body = b"".join([chunk async for chunk in response.body_iterator])
+    etag = f'W/"{hashlib.md5(body).hexdigest()}"'
+    headers = [(k, v) for k, v in response.raw_headers if k.lower() not in (b"content-length", b"etag", b"cache-control")]
+    headers += [(b"etag", etag.encode()), (b"cache-control", b"private, no-cache")]  # 共有のキャッシュには置かせない
+    if etag in request.headers.get("if-none-match", ""):
+        out = Response(status_code=304)
+        out.raw_headers = [(k, v) for k, v in headers if k.lower() != b"content-type"]
+        return out
+    out = Response(content=body, status_code=200)
+    out.raw_headers = headers + [(b"content-length", str(len(body)).encode())]
+    return out
 
 
 # ---------- 共通依存 ----------
@@ -1571,19 +1593,28 @@ def operation_logs(start: date, end: date, _: User = Depends(current_user), db: 
 PAGES = {"dinner", "tables", "breakfast", "dinner-summary", "breakfast-summary", "chat", "logs", "manual", "admin"}
 
 
+def file_response(request: Request, path: Path, **kwargs) -> Response:
+    """ファイルを返す。ブラウザが持っているものと同じなら中身を送らず 304 だけ返す(通信量対策)"""
+    st = path.stat()
+    etag = f'"{st.st_mtime_ns:x}-{st.st_size:x}"'
+    headers = {"ETag": etag, "Cache-Control": "no-cache", **kwargs.pop("headers", {})}
+    if etag in request.headers.get("if-none-match", ""):
+        return Response(status_code=304, headers=headers)
+    return FileResponse(path, headers=headers, **kwargs)
+
+
 @app.get("/manual.pdf", include_in_schema=False)
 def manual_pdf(request: Request, db: Session = Depends(get_db)):
     """操作説明書(PDF)。ログインした人だけに配信する(docs/manual の build_pdf.py で作り直す)"""
     if not session_user(request, db):
         return RedirectResponse("/login")
-    return FileResponse(BASE / "docs" / "manual.pdf", media_type="application/pdf",
-                        headers={"Content-Disposition": "inline; filename*=UTF-8''" + quote("喫食時間管理表_操作説明書.pdf"),
-                                 "Cache-Control": "no-cache"})
+    return file_response(request, BASE / "docs" / "manual.pdf", media_type="application/pdf",
+                         headers={"Content-Disposition": "inline; filename*=UTF-8''" + quote("喫食時間管理表_操作説明書.pdf")})
 
 
 @app.get("/favicon.ico", include_in_schema=False)
-def favicon():
-    return FileResponse(BASE / "static" / "favicon.ico", media_type="image/x-icon")
+def favicon(request: Request):
+    return file_response(request, BASE / "static" / "favicon.ico", media_type="image/x-icon")
 
 
 @app.get("/healthz")
