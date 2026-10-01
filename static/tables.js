@@ -13,6 +13,12 @@
   const addDays = (s, n) => { const d = new Date(s + 'T00:00:00'); d.setDate(d.getDate() + n); return fmtDate(d); };
   const WEEK = '日月火水木金土';
   const dow = s => WEEK[new Date(s + 'T00:00:00').getDay()];
+  // 印刷するとき(印刷ボタン・Ctrl+P とも)に、タイトルの下へ印刷した日時を入れる
+  window.addEventListener('beforeprint', () => {
+    const now = new Date();
+    document.getElementById('flPrintTime').textContent =
+      `印刷日時: ${fmtDate(now).replace(/-/g, '/')}(${dow(fmtDate(now))}) ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  });
   const splitRooms = room => room.split(/\s*,\s*/).filter(Boolean);
   const roomText = room => { const rs = splitRooms(room); return rs.length > 1 ? `${rs[0]} 他${rs.length - 1}室` : room; };
   const roomShort = room => { const rs = splitRooms(room); return rs.length > 1 ? `${rs[0]}他` : room; };
@@ -51,6 +57,7 @@
     </div>
     <div class="editBar noPrint" id="flEditBar" hidden></div>
     <h2 class="printTitle" id="flPrintTitle"></h2>
+    <p class="printTime" id="flPrintTime"></p>
     <div class="flBody">
       <div class="flMapWrap">
         <p class="flHint noPrint" id="flHint"></p>

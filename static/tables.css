@@ -82,7 +82,7 @@ body.dragging,body.dragging *{cursor:grabbing !important}
 .tblInfo .allergy{color:#c0392b}
 .tblInfo .overTxt{color:#c0392b;font-weight:700;display:flex;gap:4px;align-items:center}
 .tiRow:first-of-type{border-top:none}
-.printTitle{display:none}
+.printTitle,.printTime{display:none}
 @media (max-width:900px){
   .flBody{grid-template-columns:1fr}
   .flList{max-height:260px}
@@ -106,7 +106,8 @@ body.dragging,body.dragging *{cursor:grabbing !important}
 @media print{
   @page{size:A4 landscape;margin:10mm}
   body.dayPast,body.dayFuture{background:#fff}
-  .printTitle{display:block;font-size:16px;margin:0 0 8px}
+  .printTitle{display:block;font-size:16px;margin:0 0 2px}
+  .printTime{display:block;font-size:11px;color:#555;margin:0 0 8px}
   .flBody{display:block}
   .flMapWrap{border:none;padding:0}
   .flHint{display:none}
