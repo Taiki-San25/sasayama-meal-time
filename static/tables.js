@@ -5,7 +5,8 @@
   const REFRESH_MS = 30000;
   const SNAP = 4;  // 配置編集の移動の刻み
   const ALIGN_TH = 10;  // 他の卓の端・中心にこの距離まで近づいたら揃える(吸着)
-  const SEAT_SIZES = { 2: [56, 58], 4: [70, 58], 6: [96, 58] };  // サーバー(floor.py)と同じ
+  const SEAT_SIZES = { 2: [56, 58], 4: [70, 58], 6: [96, 58], 8: [122, 58], 10: [148, 58] };  // サーバー(floor.py)と同じ
+  const STD_SEATS = Object.keys(SEAT_SIZES).map(Number);  // 卓を追加・席数のプルダウン(2・4・6・8・10名)
   const svgNS = 'http://www.w3.org/2000/svg';
 
   const pad = n => String(n).padStart(2, '0');
@@ -644,7 +645,7 @@
         <label><input type="radio" name="ebTarget" value="base" ${e.target === 'base' ? 'checked' : ''}>基本レイアウト</label>
       </div>
       <span class="ebSep"></span>
-      <label class="ebAdd">卓を追加<select id="ebSeats"><option value="2">2名</option><option value="4" selected>4名</option><option value="6">6名</option></select></label>
+      <label class="ebAdd">卓を追加<select id="ebSeats">${STD_SEATS.map(n => `<option value="${n}"${n === 4 ? ' selected' : ''}>${n}名</option>`).join('')}</select></label>
       <button class="btn" data-eb="add"><i class="ti ti-plus"></i>追加</button>
       <button class="btn" data-eb="merge" ${sel.length >= 2 ? '' : 'disabled'}><i class="ti ti-link"></i>連結</button>
       <button class="btn" data-eb="split" ${one && one.parts ? '' : 'disabled'}><i class="ti ti-unlink"></i>連結を解除</button>
@@ -670,12 +671,12 @@
         <p class="muted small">${e.target === 'base' ? '基本レイアウトは、配置を変えていない日と、これから割り当てる日に使われます。' : 'この日だけの配置です。基本レイアウトは変わりません。'}</p>`;
     }
     const t = sel[0];
-    const std = [2, 4, 6].includes(t.seats) && !t.parts;
+    const std = STD_SEATS.includes(t.seats) && !t.parts;
     return `<h3>卓の設定</h3>
       <form class="form" id="ebForm">
         <label>卓番号<input type="text" name="name" value="${esc(t.name)}" maxlength="16" required></label>
         <label>席数${std
-          ? `<select name="seats">${[2, 4, 6].map(n => `<option value="${n}"${n === t.seats ? ' selected' : ''}>${n}名</option>`).join('')}</select>`
+          ? `<select name="seats">${STD_SEATS.map(n => `<option value="${n}"${n === t.seats ? ' selected' : ''}>${n}名</option>`).join('')}</select>`
           : `<input type="number" name="seats" value="${t.seats}" min="1" max="60" required>`}</label>
         ${t.parts ? `<p class="muted small">連結: ${t.parts.map(p => esc(p.name)).join('＋')}</p>` : ''}
       </form>`;
