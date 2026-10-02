@@ -214,6 +214,14 @@ window.AMT = (function () {
     ssSet('chatUnreadSeen', n);
     seenMem = n;
   };
+  // 入力中など通信のない操作も「操作」としてサーバーに伝える(ログイン有効時間が延びる)。5分に1回まで
+  let lastPing = Date.now();
+  const activityPing = () => {
+    if (Date.now() - lastPing < 5 * 60 * 1000) return;
+    lastPing = Date.now();
+    AMT.api('/api/me').catch(() => {});
+  };
+  ['keydown', 'pointerdown'].forEach(ev => document.addEventListener(ev, activityPing, { capture: true, passive: true }));
   const pollUnread = () => {
     if (document.hidden) return;
     AMT.api('/api/chat/unread', { auto: true }).then(d => AMT.setUnread(d.unread)).catch(() => {});

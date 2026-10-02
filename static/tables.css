@@ -136,6 +136,7 @@ body.dragging,body.dragging *{cursor:grabbing !important}
 .ceOut{display:inline-block;padding:4px 12px;border-radius:6px;border:1px dashed #999;color:#555;font-size:14px}
 .ceCounts{font-size:13px;color:#333}
 .ceWarn{margin:0;color:#c62828;font-weight:700}
+.ceWarnInline{color:#c62828;font-weight:700}
 .ceNote{margin:0;font-size:12px}
 /* 2泊目以降(管理表の泊数バッジと同じ色) */
 .stayTag{display:inline-block;padding:0 6px;border-radius:4px;background:#faeeda;color:#633806;border:1px solid #ef9f27;

@@ -122,6 +122,17 @@ async def api_etag(request: Request, call_next):
     return out
 
 
+@app.middleware("http")
+async def auto_refresh_keeps_cookie(request: Request, call_next):
+    """自動更新(X-Auto-Refresh: 1)の応答ではログインのクッキーを送り直さない。
+    セッションはクッキーに入っているため、人の操作と同時に返ってきた自動更新の応答が、
+    操作で更新した「最後の操作時刻」を古い値で上書きしてしまうのを防ぐ(時間切れのログアウトなどエラー時は送る)"""
+    response = await call_next(request)
+    if request.headers.get("x-auto-refresh") == "1" and response.status_code < 400 and "set-cookie" in response.headers:
+        del response.headers["set-cookie"]
+    return response
+
+
 # ---------- 共通依存 ----------
 def get_db():
     with SessionLocal() as s:
@@ -150,8 +161,12 @@ def session_user(request: Request, db: Session) -> User | None:
     last = request.session.get("last_active")
     if last is not None and now - last > session_limit_hours(user) * 3600:
         request.session.clear()
-        db.add(AuthLog(user_id=user.id, username=user.username, action="session_timeout"))
-        db.commit()
+        # 複数のタブ・同時の自動更新で同じ時間切れを何度も記録しないよう、直近1分に記録があれば残さない
+        recent = db.scalar(select(AuthLog.id).where(AuthLog.user_id == user.id, AuthLog.action == "session_timeout",
+                                                     AuthLog.at >= now_jst() - timedelta(minutes=1)))
+        if not recent:
+            db.add(AuthLog(user_id=user.id, username=user.username, action="session_timeout"))
+            db.commit()
         return None
     if last is None or request.headers.get("x-auto-refresh") != "1":
         request.session["last_active"] = now
@@ -1296,7 +1311,8 @@ def create_user(body: UserCreateIn, me_: User = Depends(admin_user), db: Session
     if db.scalar(select(User).where(User.username == body.username)):
         raise HTTPException(400, "そのログインIDは既に使われています")
     u = User(username=body.username, display_name=body.display_name.strip(),
-             password_hash=hash_password(body.password), session_hours=body.session_hours)
+             password_hash=hash_password(body.password),
+             session_hours=SESSION_MAX_HOURS if body.role in ADMIN_ROLES else body.session_hours)
     set_role(u, body.role)
     db.add(u)
     db.commit()
@@ -1321,6 +1337,8 @@ def update_user(uid: int, body: UserUpdateIn, me_: User = Depends(admin_user), d
         u.active = body.active
     if body.session_hours is not None:
         u.session_hours = body.session_hours
+    if u.role in ADMIN_ROLES:  # 管理者以上は12時間で固定(画面の表示と保存している値をそろえる)
+        u.session_hours = SESSION_MAX_HOURS
     db.commit()
     return user_dict(u)
 
