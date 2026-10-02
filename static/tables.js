@@ -281,8 +281,35 @@
     $('flHint').textContent = hint;
   }
 
+  // ---------- 入場済の予約の卓を変えるときの確認 ----------
+  const tblName = id => (currentTables().find(t => t.id === id) || {}).name ?? id;
+  const tblChip = id => `<span class="ceTbl">卓${esc(tblName(id))}</span>`;
+  const whoLine = r => `<span class="ceWho">${esc(roomText(r.room))} ${esc(r.guest_name)}${r.guest_name ? ' 様' : ''} <span class="rcEntered">入場済</span></span>`;
+  // rs: 入場済の予約、flow: 変更の図(卓7 → 卓9 など)、question: 赤字で出す確認の文
+  function confirmEntered({ title, rs, flow, question, ok, danger, note }) {
+    return new Promise(resolve => {
+      let yes = false;
+      modal({
+        title,
+        body: `<div class="ceBox"><div class="ceWhos">${rs.map(whoLine).join('')}</div>
+          <div class="ceFlow">${flow}</div>
+          <p class="ceWarn">すでに入場済です。${question}</p>
+          ${note ? `<p class="muted ceNote">${note}</p>` : ''}</div>`,
+        buttons: [{ label: 'キャンセル' }, { label: ok, primary: !danger, danger, onClick: () => { yes = true; } }],
+        onClose: () => resolve(yes),
+      });
+    });
+  }
+  const entered = rs => rs.filter(r => r && r.entered_at);
+  const tableIdsOf = rid => slotAssign().filter(a => a.reservation_id === rid).map(a => a.table_id);
+
   // ---------- 割り当て ----------
   async function assign(rid, tableId) {
+    const r = resById()[rid], mine = tableIdsOf(rid);
+    // 入場済ですでに卓に座っている予約を、別の卓にも座らせるとき(最初の卓に置くときは確認しない)
+    if (r && r.entered_at && mine.length && !mine.includes(tableId) && !(await confirmEntered({
+      title: '入場済の予約に卓を追加', rs: [r], flow: `${mine.map(tblChip).join('')}<span class="ceArrow">＋</span>${tblChip(tableId)}`,
+      question: '卓を追加してよろしいですか？', ok: '追加する' }))) return;
     const d = await api('/api/floor/assign', { method: 'POST', body: { date: state.date, time_slot: state.slot, table_id: tableId, reservation_id: rid } });
     state.selected = d.remaining > 0 ? rid : null;  // 残りがいれば続けて次の卓を選べるように
     await load();
@@ -290,6 +317,13 @@
       : `卓${d.table}に割り当てました`);
   }
   async function move(from, toId) {
+    const rs = entered(from.rid != null ? [resById()[from.rid]] : resAt(from.table));
+    if (rs.length && !(await confirmEntered({
+      title: '入場済の予約の移動', rs, flow: `${tblChip(from.table)}<span class="ceArrow">→</span>${tblChip(toId)}`,
+      question: '移動してよろしいですか？', ok: '移動する' }))) {
+      state.moveFrom = null;
+      return render();
+    }
     await api('/api/floor/move', { method: 'POST', body: { date: state.date, time_slot: state.slot, table_id: from.table, reservation_id: from.rid ?? null, to_table_id: toId } });
     state.moveFrom = null;
     await load();
@@ -378,6 +412,12 @@
         if (v === '' || !Number.isInteger(n) || n < 0 || n > 99) return toast('人数は0〜99の整数で入力してください', true);
         counts[k] = n;
       }
+      const r = resById()[rid], old = countsOf(slotAssign().find(a => a.table_id === tableId && a.reservation_id === rid) || {});
+      const cText = c => `大人${c.adults}・幼児${c.children}・席のみ${c.infants}`;
+      if (r && r.entered_at && COUNT_KEYS.some(k => counts[k] !== old[k]) && !(await confirmEntered({
+        title: '入場済の予約の人数変更', rs: [r],
+        flow: `${tblChip(tableId)}<span class="ceCounts">${cText(old)}</span><span class="ceArrow">→</span><span class="ceCounts">${cText(counts)}</span>`,
+        question: '人数を変更してよろしいですか？', ok: '変更する' }))) return;
       await api('/api/floor/counts', { method: 'PUT', body: { date: state.date, time_slot: state.slot, table_id: tableId, reservation_id: rid, counts } });
       const keep = unsavedMemos();
       state.selected = null;  // 選んだままだと、開き直したときに減らした人数がこの卓へ自動で戻ってしまう
@@ -405,7 +445,13 @@
         b.disabled = false;
         return;
       }
-      if (b.dataset.ti === 'remove' && memoOf(tableId, rid) && !(await confirmDialog({
+      const r = resById()[rid];
+      if (b.dataset.ti === 'remove' && r?.entered_at) {  // 入場済なら卓メモの確認もまとめてこの画面で
+        if (!(await confirmEntered({
+          title: '入場済の予約を外す', rs: [r], flow: `${tblChip(tableId)}<span class="ceArrow">→</span><span class="ceOut">未アサイン</span>`,
+          question: '卓から外してよろしいですか？', ok: memoOf(tableId, rid) ? '外す(メモも削除)' : '外す', danger: true,
+          note: memoOf(tableId, rid) ? 'この卓の卓メモも削除されます。' : '' }))) return;
+      } else if (b.dataset.ti === 'remove' && memoOf(tableId, rid) && !(await confirmDialog({
         title: '卓メモの削除', message: 'この卓から外すと、入力されている卓メモも削除されます。外しますか？', ok: '外す(メモも削除)', danger: true }))) return;
       m.close();
       if (b.dataset.ti === 'remove') unassign(tableId, rid).catch(() => {});
